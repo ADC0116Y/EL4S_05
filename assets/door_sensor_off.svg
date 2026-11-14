@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="10" viewBox="0 0 28 10">
+  <!-- 自動ドアのセンサー（閉まっているとき） -->
+  <rect width="28" height="10" rx="3" fill="#2b2622"/>
+  <circle cx="14" cy="5" r="3" fill="#ff6b57"/>
+</svg>

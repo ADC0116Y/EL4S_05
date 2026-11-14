@@ -72,6 +72,8 @@
   const DOOR_X = STORE.x + STORE.w / 2;     // 入口の中心
   const DOOR_Y = STORE.y + STORE.h;         // 店の下辺 = ゲート位置
   const DOOR_HALF = 34;
+  const QGATE_Y = QUEUE.y;                  // 行列の出口ゲート（ボタンで開閉）
+  const QGATE_HALF = 28;
   const BUBBLE = {cx: 640, cy: 100, rx: 125, ry: 66};
   const BUBBLE_BOX = {x: 465, y: 30, w: 300, h: 140};
 
@@ -79,18 +81,19 @@
   const CFG = window.GAME_ASSETS || {};
   function loadImg(src){ if (!src) return null; const im = new Image(); im.src = src; return im; }
   function ok(im){ return !!(im && im.complete && im.naturalWidth > 0); }
-  const DEFAULT_SRC = {
-    store: [CFG.store], queue: [CFG.queue], bubble: [CFG.bubble], gate: [CFG.gate],
-    background: [CFG.background], people: CFG.people || [],
-  };
-  const IMG = {
-    background: loadImg(CFG.background),
-    store: loadImg(CFG.store),
-    queue: loadImg(CFG.queue),
-    bubble: loadImg(CFG.bubble),
-    gate: loadImg(CFG.gate),
-    people: (CFG.people || []).map(loadImg),
-  };
+  // 1枚ずつの画像（キー名は assets/config.js と asset_settings.html と同じ）
+  const SINGLE_KEYS = ['background', 'store', 'queue', 'bubble', 'corridor',
+                       'doorFrame', 'doorPanel', 'doorMat', 'doorSensorOff', 'doorSensorOn',
+                       'gate', 'gatePost', 'gateLampOff', 'gateLampOn'];
+  const DEFAULT_SRC = {people: CFG.people || []};
+  const IMG = {people: (CFG.people || []).map(loadImg)};
+  for (const k of SINGLE_KEYS) { DEFAULT_SRC[k] = [CFG[k]]; IMG[k] = loadImg(CFG[k]); }
+  // 画像があれば描いて true、無ければ false（呼び出し側が内蔵の絵で代わりに描く）
+  function drawImg(key, x, y, w, h){
+    if (!ok(IMG[key])) return false;
+    ctx.drawImage(IMG[key], x, y, w, h);
+    return true;
+  }
   function randomSprite(){ return IMG.people.length ? IMG.people[Math.floor(Math.random()*IMG.people.length)] : null; }
   const P_SIZE = CFG.personSize || {w: 24, h: 28};
   const P_ANCHOR = CFG.personAnchor || {x: P_SIZE.w / 2, y: P_SIZE.h / 2};
@@ -102,7 +105,7 @@
       speed:  {start: 45, startPerStreak: 4, accel: 32, accelPerStreak: 7, personMin: 0.75, personMax: 1.35, response: 6},
       queue:  {gap: 15, extraGap: 30, firstDistance: 14, sideJitter: 6},
       gate:   {stopDistance: 14, animSpeed: 18, judgeDelayMs: 900},
-      store:  {walkSpeed: 220},
+      store:  {walkSpeed: 220, approachSpeed: 120, doorSensor: 70},
       texts: {
         requestTop: '{target}人', requestBottom: 'ちょうだい！',
         okTitle: 'ぴったり！ 大成功', okDetail: '{target}人ちょうど入店。次はもっと勢いが強くなります。',
@@ -152,6 +155,7 @@
     }
     return {segs, total};
   })();
+  const GATE_D = QGATE_Y - (DOOR_Y + 4);    // 通り道の上での行列ゲートの位置（店のドアからの距離）
   function pathPoint(d){
     d = Math.max(0, Math.min(PATH.total, d));
     for (const s of PATH.segs) {
@@ -179,9 +183,10 @@
   bestEl.textContent = best;
   let streak = 0;
 
-  const COLORS = ['#f2b134','#e0533d','#7fd1a8','#f08fb0','#b99cf0','#7cc8e8','#f5f0e6','#ffd27a','#9fe07a','#ff9e6b'];
+  const COLORS = ['#2f7fd8','#e8504a','#2fae6e','#f0a020','#8a63d2','#e0609a'];
 
-  let people, state, target, entered, openTime, gateAnim, judgeTimer, accel, vBase, spots, bubbleText, bubbleColor;
+  let people, state, target, entered, seated, openTime, gateAnim, doorAnim = 0, doorOpen = false, judgeTimer = null,
+      accel, vBase, spots, bubbleText, bubbleColor;
 
   function storeSpots(){
     const spots = [];
@@ -197,19 +202,19 @@
   }
 
   function newRound(){
-    clearTimeout(judgeTimer);
+    clearTimeout(judgeTimer); judgeTimer = null;
     const T = GC.target, S = GC.speed, Q = GC.queue;
     target = Math.round(T.min) + Math.floor(Math.random() * (Math.round(T.max) - Math.round(T.min) + 1))
            + Math.round(Math.min(streak * T.bonusPerStreak, T.bonusMax));
     bubbleText = [fmt(GC.texts.requestTop, {target}), fmt(GC.texts.requestBottom, {target})];
     bubbleColor = '#2b2622';
-    entered = 0; openTime = 0; gateAnim = 0;
+    entered = 0; seated = 0; openTime = 0; gateAnim = 0;
     accel = S.accel + streak * S.accelPerStreak;   // 開いている間の加速（連続成功で上がる）
     vBase = S.start + streak * S.startPerStreak;
     spots = storeSpots();
     people = [];
-    // d = ゲートまでの距離。間隔をバラつかせて「固まって来る」瞬間を作る
-    let d = Q.firstDistance;
+    // d = 店のドアまでの距離（行列ゲートは d = GATE_D）。間隔をバラつかせて「固まって来る」瞬間を作る
+    let d = GATE_D + Q.firstDistance;
     while (d < PATH.total) {
       people.push({
         d, v: 0, x: 0, y: 0,
@@ -217,7 +222,7 @@
         mul: S.personMin + Math.random() * (S.personMax - S.personMin),
         color: COLORS[Math.floor(Math.random()*COLORS.length)],
         sprite: randomSprite(),
-        inside: false, spot: null, bob: Math.random() * 6.28
+        passed: false, inside: false, spot: null, bob: Math.random() * 6.28
       });
       d += MIN_GAP + Math.random() * Math.random() * Math.max(0, Q.extraGap);
     }
@@ -254,7 +259,7 @@
       btn.textContent = '判定中…';
       btn.className = '';
       btn.disabled = true;
-      judgeTimer = setTimeout(judge, Math.max(0, GC.gate.judgeDelayMs));
+      // 判定は、ゲートを通った人が全員店に入ってから（update 内で予約）
     } else if (state === 'result') {
       newRound();
     }
@@ -325,26 +330,49 @@
     if (gateOpen) openTime += dt;
 
     const surge = gateOpen ? vBase + accel * openTime : 0;
-    let limit = gateOpen ? -Infinity : GC.gate.stopDistance;   // 閉まっている時はゲート手前で止まる
+    const stopLine = GATE_D + GC.gate.stopDistance;   // 閉まっている時に行列の人が止まる位置
+    let limit = -Infinity;                            // 前の人にぶつからないための位置
+    let walkers = 0, nearDoor = false;
     for (const p of people) {
       if (p.inside) continue;
-      const want = gateOpen ? surge * p.mul : 0;
+      // ゲートを通った人は、閉めた後も通路を歩いて店へ向かう
+      const want = p.passed ? Math.max(surge * p.mul, GC.store.approachSpeed)
+                 : gateOpen ? surge * p.mul : 0;
       p.v += (want - p.v) * Math.min(1, dt * GC.speed.response);
       let nd = p.d - p.v * dt;
+      if (!p.passed && !gateOpen) {
+        // 止まる位置より手前にいる人はその場で止まる（後ろへワープさせない）
+        const stopAt = p.d >= stopLine ? stopLine : p.d;
+        if (nd < stopAt) { nd = stopAt; p.v = 0; }
+      }
       if (nd < limit) { nd = limit; p.v = Math.min(p.v, 0); }
       p.d = nd;
-      if (p.d < 0) {
-        // ゲートを通過 → 入店
-        p.inside = true;
-        p.x = DOOR_X; p.y = DOOR_Y;
-        p.spot = spots[entered % spots.length];
+      if (!p.passed && p.d < GATE_D) {
+        // 行列ゲートを通過 → 入店人数としてカウント
+        p.passed = true;
         entered++;
         updateLive();
+      }
+      if (p.d < 0) {
+        // 店のドアを通過 → 店内の席へ
+        p.inside = true;
+        p.x = DOOR_X; p.y = DOOR_Y;
+        p.spot = spots[seated++ % spots.length];
       } else {
         placeOnPath(p);
         limit = p.d + MIN_GAP;
+        if (p.passed) { walkers++; if (p.d < GC.store.doorSensor) nearDoor = true; }
       }
       if (p.v > 5) p.bob += dt * (6 + p.v / 25);
+    }
+
+    // 店の自動ドア：人が近づくと開く
+    doorOpen = nearDoor;
+    doorAnim += ((doorOpen ? 1 : 0) - doorAnim) * Math.min(1, dt * GC.gate.animSpeed);
+
+    // 閉めた後、通路を歩いている人が全員入店したら判定
+    if (state === 'closed' && walkers === 0 && judgeTimer === null) {
+      judgeTimer = setTimeout(judge, Math.max(0, GC.gate.judgeDelayMs));
     }
     for (const p of people) {
       if (!p.inside) continue;
@@ -361,14 +389,26 @@
       ctx.drawImage(p.sprite, p.x - P_ANCHOR.x, p.y - P_ANCHOR.y + bobY, P_SIZE.w, P_SIZE.h);
       return;
     }
-    ctx.fillStyle = 'rgba(0,0,0,.18)';
-    ctx.beginPath(); ctx.ellipse(p.x, p.y + R + 1, R * 0.9, 3, 0, 0, 6.28); ctx.fill();
+    // 画像が無いときの代わり：ピクトグラムの人（person_*.svg と同じ形）
+    const ox = p.x - 12, oy = p.y - 13 + bobY;
+    ctx.fillStyle = 'rgba(0,0,0,.2)';
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + 13, 6.5, 1.7, 0, 0, 6.28); ctx.fill();
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.lineJoin = 'round';
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.2;
+    ctx.fill(PICTO); ctx.stroke(PICTO);
     ctx.fillStyle = p.color;
-    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(p.x, p.y + bobY, R, 0, 6.28); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#f3d9c0';
-    ctx.beginPath(); ctx.arc(p.x, p.y - 3 + bobY, 4.2, 0, 6.28); ctx.fill();
+    ctx.fill(PICTO);
+    ctx.restore();
   }
+  const PICTO = new Path2D(
+    'M15.6 4.6a3.6 3.6 0 1 1-7.2 0a3.6 3.6 0 1 1 7.2 0z' +            // 頭
+    'M9.6 9h4.8a2.4 2.4 0 0 1 2.4 2.4v4.6a2.4 2.4 0 0 1-2.4 2.4h-4.8a2.4 2.4 0 0 1-2.4-2.4v-4.6a2.4 2.4 0 0 1 2.4-2.4z' + // 胴
+    'M4.4 10.6a1.15 1.15 0 0 1 2.3 0v5.8a1.15 1.15 0 0 1-2.3 0z' +   // 左腕
+    'M17.3 10.6a1.15 1.15 0 0 1 2.3 0v5.8a1.15 1.15 0 0 1-2.3 0z' +  // 右腕
+    'M7.8 17h3.6v6.6a1.8 1.8 0 0 1-3.6 0z' +                          // 左脚
+    'M12.6 17h3.6v6.6a1.8 1.8 0 0 1-3.6 0z');                         // 右脚
 
   function drawBox(b, label, img){
     if (ok(img)) { ctx.drawImage(img, b.x, b.y, b.w, b.h); return; }
@@ -417,8 +457,10 @@
     if (ok(IMG.background)) ctx.drawImage(IMG.background, 0, 0, W, H);
 
     // 通路（店の入口から行列まで）
-    ctx.fillStyle = '#ebe6dd';
-    ctx.fillRect(DOOR_X - 24, DOOR_Y, 48, QUEUE.y - DOOR_Y + 4);
+    if (!drawImg('corridor', DOOR_X - 24, DOOR_Y, 48, QUEUE.y - DOOR_Y + 4)) {
+      ctx.fillStyle = '#ebe6dd';
+      ctx.fillRect(DOOR_X - 24, DOOR_Y, 48, QUEUE.y - DOOR_Y + 4);
+    }
 
     drawBox(QUEUE, '行列', IMG.queue);
     drawBox(STORE, '店', IMG.store);
@@ -436,27 +478,120 @@
     ctx.fillStyle = '#ebe6dd';
     ctx.fillRect(DOOR_X - DOOR_HALF, DOOR_Y - 6, DOOR_HALF * 2, 6);
 
+    // 自動ドア前のマット
+    const MAT_W = DOOR_HALF * 2 + 12, MAT_H = 26;
+    if (!drawImg('doorMat', DOOR_X - MAT_W / 2, DOOR_Y + 8, MAT_W, MAT_H)) {
+    ctx.fillStyle = '#6b6f73';
+    roundRect(DOOR_X - MAT_W / 2, DOOR_Y + 8, MAT_W, MAT_H, 4); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1;
+    for (let y = DOOR_Y + 13; y < DOOR_Y + 8 + MAT_H - 3; y += 4) {
+      ctx.beginPath(); ctx.moveTo(DOOR_X - MAT_W / 2 + 5, y); ctx.lineTo(DOOR_X + MAT_W / 2 - 5, y); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.font = `bold 10px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('自動ドア', DOOR_X, DOOR_Y + 8 + MAT_H / 2);
+    }
+
     for (const p of people) if (p.inside) drawPerson(p);
     for (let i = people.length - 1; i >= 0; i--) if (!people[i].inside) drawPerson(people[i]);
 
-    // ゲートバー（開くと左の柱に収納）
-    const barLen = DOOR_HALF * 2 * (1 - gateAnim);
+    drawAutoDoor();
+    drawQueueGate();
+
+    drawBubble();
+  }
+
+  function roundRect(x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+  }
+
+  // 自動ドア：ガラス戸2枚が左右の戸袋へスライドして開く
+  function drawAutoDoor(){
+    const T = 12;                       // ドアの厚み（上から見た幅）
+    const top = DOOR_Y - T / 2;
+    const e = doorAnim * doorAnim * (3 - 2 * doorAnim); // なめらかに加減速
+    const slide = DOOR_HALF * e;
+
+    // 戸袋（開いたドアが収まる壁の部分）とレール
+    const FW = DOOR_HALF * 4 + 8;
+    if (!drawImg('doorFrame', DOOR_X - FW / 2, top - 3, FW, T + 6)) {
+      ctx.fillStyle = '#0e4762';
+      ctx.fillRect(DOOR_X - DOOR_HALF * 2 - 4, top - 3, DOOR_HALF + 4, T + 6);
+      ctx.fillRect(DOOR_X + DOOR_HALF,         top - 3, DOOR_HALF + 4, T + 6);
+      ctx.fillStyle = '#c9d1d6';
+      ctx.fillRect(DOOR_X - DOOR_HALF * 2, DOOR_Y - 1, DOOR_HALF * 4, 2);
+    }
+
+    const panels = [
+      {x: DOOR_X - DOOR_HALF - slide, half: 0},  // 左の戸
+      {x: DOOR_X + slide,             half: 1},  // 右の戸
+    ];
+    for (const pn of panels) {
+      const x = pn.x;
+      if (ok(IMG.doorPanel)) {
+        // 画像は左の戸。右の戸は左右反転して描く
+        ctx.save();
+        if (pn.half === 1) { ctx.translate(x + DOOR_HALF, 0); ctx.scale(-1, 1); ctx.drawImage(IMG.doorPanel, 0, top, DOOR_HALF, T); }
+        else ctx.drawImage(IMG.doorPanel, x, top, DOOR_HALF, T);
+        ctx.restore();
+        continue;
+      }
+      // ガラス
+      ctx.fillStyle = 'rgba(178,222,240,.88)';
+      ctx.fillRect(x, top, DOOR_HALF, T);
+      // 光の反射
+      ctx.fillStyle = 'rgba(255,255,255,.65)';
+      ctx.fillRect(x + 5, top + 2, DOOR_HALF * 0.35, 2);
+      // サッシ（枠）
+      ctx.strokeStyle = '#7d8a92'; ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, top + 1, DOOR_HALF - 2, T - 2);
+      // 取っ手側の縦枠を太く（中央で合わさる部分）
+      ctx.fillStyle = '#7d8a92';
+      ctx.fillRect(pn.half === 0 ? x + DOOR_HALF - 3 : x, top, 3, T);
+    }
+
+    // センサー（ドア上部）。開いている間は緑に光る
+    const sx = DOOR_X, sy = DOOR_Y - T / 2 - 12;
+    if (drawImg(doorOpen ? 'doorSensorOn' : 'doorSensorOff', sx - 14, sy - 5, 28, 10)) return;
+    ctx.fillStyle = '#2b2622';
+    roundRect(sx - 14, sy - 5, 28, 10, 3); ctx.fill();
+    ctx.fillStyle = doorOpen ? '#5fe39a' : '#ff6b57';
+    ctx.beginPath(); ctx.arc(sx, sy, 3, 0, 6.28); ctx.fill();
+    if (doorOpen) {
+      ctx.fillStyle = 'rgba(95,227,154,.25)';
+      ctx.beginPath(); ctx.arc(sx, sy, 7, 0, 6.28); ctx.fill();
+    }
+  }
+
+  // 行列の出口ゲート（ボタンで開閉）：バーが左の柱へ縮んで開く
+  function drawQueueGate(){
+    const x0 = DOOR_X - QGATE_HALF, y = QGATE_Y;
+    const barLen = QGATE_HALF * 2 * (1 - gateAnim);
     if (ok(IMG.gate)) {
       const g = IMG.gate, f = 1 - gateAnim;
       if (barLen > 0.5) ctx.drawImage(g, g.naturalWidth * (1 - f), 0, g.naturalWidth * f, g.naturalHeight,
-                                      DOOR_X - DOOR_HALF, DOOR_Y - 4, barLen, 8);
-    } else {
-      ctx.fillStyle = gateAnim > 0.5 ? '#2f9e6b' : '#e0533d';
-      ctx.fillRect(DOOR_X - DOOR_HALF, DOOR_Y - 3, barLen, 6);
+                                      x0, y - 4, barLen, 8);
+    } else if (barLen > 0.5) {
+      ctx.fillStyle = '#e0533d';
+      ctx.fillRect(x0, y - 3, barLen, 6);
     }
-    ctx.fillStyle = '#2b2622';
-    ctx.beginPath(); ctx.arc(DOOR_X - DOOR_HALF, DOOR_Y, 6, 0, 6.28); ctx.fill();
-    ctx.beginPath(); ctx.arc(DOOR_X + DOOR_HALF, DOOR_Y, 6, 0, 6.28); ctx.fill();
-    // ランプ
-    ctx.fillStyle = state === 'open' ? '#2f9e6b' : '#e0533d';
-    ctx.beginPath(); ctx.arc(DOOR_X + DOOR_HALF + 18, DOOR_Y + 14, 7, 0, 6.28); ctx.fill();
-
-    drawBubble();
+    // 柱（左右）
+    for (const px of [x0, DOOR_X + QGATE_HALF]) {
+      if (drawImg('gatePost', px - 6, y - 6, 12, 12)) continue;
+      ctx.fillStyle = '#2b2622';
+      ctx.beginPath(); ctx.arc(px, y, 6, 0, 6.28); ctx.fill();
+    }
+    // ランプ（開いている間は緑）
+    const lx = DOOR_X + QGATE_HALF + 18, ly = y - 14;
+    if (!drawImg(state === 'open' ? 'gateLampOn' : 'gateLampOff', lx - 8, ly - 8, 16, 16)) {
+      ctx.fillStyle = state === 'open' ? '#2f9e6b' : '#e0533d';
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(lx, ly, 7, 0, 6.28); ctx.fill(); ctx.stroke();
+    }
   }
 
   function fit(){
