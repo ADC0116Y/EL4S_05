@@ -446,8 +446,13 @@ const THEMES = {
 //  ゲーム状態
 // ============================================================
 // 選択中のモード（前回の選択を記憶）
-const settings = { diff: 'normal', time: '60', theme: 'pop' };
+const settings = { diff: 'normal', time: '60', theme: 'pop', sound: 'all' };
 try { Object.assign(settings, JSON.parse(store.get(SETTINGS_KEY, '{}'))); } catch { /* ignore */ }
+if (!['all', 'se', 'off'].includes(settings.sound)) settings.sound = 'all';
+// サウンド（sound.js が無くても動くようにする）。デモ中は鳴らさない
+const Snd = window.Sound || { unlock() {}, setMode() {}, pause() {}, se: new Proxy({}, { get: () => () => {} }), bgm: { start() {}, stop() {}, hurry() {} } };
+const SE = (name, ...args) => { if (g && !g.demo) Snd.se[name](...args); };
+Snd.setMode(settings.sound);
 if (!DIFFS[settings.diff]) settings.diff = 'normal';
 if (!TIMES[settings.time]) settings.time = '60';
 if (!THEMES[settings.theme]) settings.theme = 'pop';
@@ -493,6 +498,7 @@ function newRequest() {
   const hi = Math.round(start + (D.nMax - start) * k);
   const n = randi(lo, hi);
   g.req = { n, sent: 0, arrived: 0, locked: false, t: 0 };
+  SE('request');
   if (g.demo) {
     // デモ: たまにわざと少しずらして、ミスの様子も見せる
     g.req.demoWait = rand(0.3, 0.9);
@@ -513,6 +519,7 @@ function releaseOne() {
     ],
   });
   g.req.sent++;
+  SE('release', g.req.sent);
 }
 
 // 店に入った人は空いている席へ歩いていく（見た目だけ）
@@ -534,10 +541,12 @@ function judge() {
     g.score += pts; g.ok++; g.people += r.n;
     addFloat('ぴったり！', fx, fy, T.ok, 20);
     addFloat(`+${pts}` + (g.combo >= 2 ? `  ${g.combo}コンボ` : ''), fx, fy + 24, T.ok, 14);
+    SE('success', g.combo);
   } else {
     g.combo = 0; g.miss++;
     addFloat(diff > 0 ? `${diff}人多い…` : `${-diff}人足りない…`, fx, fy, T.ng, 18);
-    if (g.endless) { g.lives--; g.lifeFlash = 1; }
+    SE('miss');
+    if (g.endless) { g.lives--; g.lifeFlash = 1; SE('lifeLost'); }
   }
   g.req = null;
   g.nextReq = rand(0.5, 2);
@@ -562,6 +571,7 @@ function setGate(open) {
   if (g.open === open) return;
   g.open = open;
   g.pAnim = 1;
+  SE(open ? 'gateOpen' : 'gateClose');
   if (g.open) {
     g.openT = 0; g.acc = 1;           // 開けた瞬間に1人目が出る
   } else if (g.req && g.req.sent > 0 && !g.req.locked) {
@@ -585,6 +595,12 @@ function update(dt) {
   if (state === 'pause') return;
   if (state === 'count') {
     g.countdown -= dt;
+    // カウントダウンの音（3・2・1 → スタート）
+    const n = Math.max(0, Math.ceil(g.countdown - 0.4));
+    if (n !== g.lastCount) {
+      g.lastCount = n;
+      if (n > 0) SE('count'); else { SE('go'); Snd.bgm.start(); }
+    }
     if (g.countdown <= 0) { state = 'play'; updateBtn(); }
   }
   // デモが終わったら作り直してループ
@@ -597,6 +613,11 @@ function update(dt) {
     g.elapsed += dt;
     if (!g.endless) {
       g.time -= dt;
+      // 残り10秒: 毎秒チクタク＋BGMを速く
+      if (g.time <= 10 && !g.demo) {
+        const sec = Math.ceil(g.time);
+        if (sec !== g.lastSec) { g.lastSec = sec; if (sec > 0) SE('tick'); Snd.bgm.hurry(true); }
+      }
       if (g.time <= 0) {
         g.time = 0;
         if (g.demo) g.restartIn = 1.5; else endGame();
@@ -881,8 +902,10 @@ function setOption(key, v) {
   settings[key] = v;
   store.set(SETTINGS_KEY, JSON.stringify(settings));
   if (key === 'theme') applyTheme(v);
+  else if (key === 'sound') Snd.setMode(v);
   else if (state === 'title') { newGame(true); resetVisuals(); }   // 難易度・時間はデモを作り直して反映
   refreshMenu();
+  Snd.se.ui();
 }
 function applyTheme(key) {
   T = THEMES[key];
@@ -891,6 +914,8 @@ function applyTheme(key) {
   document.body.style.background = T.page;
 }
 function startGame() {
+  Snd.bgm.stop();
+  Snd.pause(false);
   newGame(false);
   resetVisuals();
   $('title').classList.add('hidden');
@@ -902,6 +927,8 @@ function startGame() {
 function endGame() {
   g.open = false;
   setState('over');
+  Snd.bgm.stop();
+  if (!g.endless) Snd.se.timeUp();
   const key = modeKey();
   const isNew = g.score > (hiScores[key] || 0);
   if (isNew) { hiScores[key] = g.score; store.set(HI_KEY, JSON.stringify(hiScores)); }
@@ -912,9 +939,15 @@ function endGame() {
   $('rMiss').textContent = `${g.miss}回`;
   $('rCombo').textContent = g.maxCombo;
   $('rNew').classList.toggle('hidden', !isNew);
-  setTimeout(() => { if (state === 'over') $('result').classList.remove('hidden'); }, 700);
+  setTimeout(() => {
+    if (state !== 'over') return;
+    $('result').classList.remove('hidden');
+    Snd.se.result(isNew);
+  }, 900);
 }
 function toTitle() {
+  Snd.bgm.stop();
+  Snd.pause(false);
   newGame(true);
   resetVisuals();
   $('result').classList.add('hidden');
@@ -927,15 +960,20 @@ function pauseGame() {
   if (state !== 'play' && state !== 'count') return;
   g.pausedFrom = state;
   setState('pause');
+  Snd.pause(true);
   $('pause').classList.remove('hidden');
 }
 function resumeGame() {
   if (state !== 'pause') return;
   $('pause').classList.add('hidden');
+  Snd.pause(false);
   setState(g.pausedFrom);
 }
 
 // 入力
+// 音はユーザー操作の中でしか鳴らし始められないので、最初の操作で準備する
+document.addEventListener('pointerdown', () => Snd.unlock(), true);
+document.addEventListener('keydown', () => Snd.unlock(), true);
 btn.addEventListener('pointerdown', e => { e.preventDefault(); toggleGate(); });
 btn.addEventListener('click', e => { if (e.detail === 0) toggleGate(); }); // キーボードでボタン操作した場合
 window.addEventListener('keydown', e => {

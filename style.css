@@ -153,7 +153,8 @@ html, body {
 }
 
 .menu { padding: .9em .9em .7em; }
-.opt { display: flex; align-items: center; gap: .5em; margin-bottom: .5em; }
+.opt { display: flex; align-items: center; gap: .5em; margin-bottom: .45em; }
+.opt[data-key="sound"] .seg button { font-size: .78em; }
 .opt .tl { flex: 0 0 3.6em; text-align: left; font-size: .78em; font-weight: 800; color: var(--sub); }
 .seg { flex: 1; display: flex; background: var(--chip); border-radius: .7em; padding: .2em; gap: .2em; }
 .seg button {

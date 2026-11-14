@@ -55,6 +55,14 @@
             <button type="button" data-v="neon">ネオン</button>
           </div>
         </div>
+        <div class="opt" data-key="sound">
+          <span class="tl">サウンド</span>
+          <div class="seg">
+            <button type="button" data-v="all">BGM＋効果音</button>
+            <button type="button" data-v="se">効果音のみ</button>
+            <button type="button" data-v="off">なし</button>
+          </div>
+        </div>
         <button id="startBtn" type="button" class="big">スタート</button>
         <div class="foot">
           <span class="hi">ハイスコア <b id="hiTitle">0</b></span>
@@ -140,23 +148,28 @@
 
   // 2) CSS と JS も最新かどうかサーバーに確認して読み込む
   try {
-    const [css, js] = await Promise.all([get('style.css', 'no-cache'), get('game.js', 'no-cache')]);
+    const JS = ['sound.js', 'game.js'];   // この順に実行する
+    const [css, ...codes] = await Promise.all([get('style.css', 'no-cache'), ...JS.map(f => get(f, 'no-cache'))]);
     const style = document.createElement('style');
     style.textContent = css;
     document.head.appendChild(style);
     showPage();
-    const script = document.createElement('script');
-    script.textContent = js + '\n//# sourceURL=game.js';
-    document.body.appendChild(script);
+    codes.forEach((code, i) => {
+      const script = document.createElement('script');
+      script.textContent = code + `\n//# sourceURL=${JS[i]}`;
+      document.body.appendChild(script);
+    });
   } catch {
     // fetch が使えない環境（ファイルを直接開いた場合など）は普通に読み込む
     const link = document.createElement('link');
     link.rel = 'stylesheet'; link.href = 'style.css';
     link.onload = showPage; link.onerror = showPage;
     document.head.appendChild(link);
-    const script = document.createElement('script');
-    script.src = 'game.js';
-    document.body.appendChild(script);
+    for (const f of ['sound.js', 'game.js']) {
+      const script = document.createElement('script');
+      script.src = f; script.async = false;   // 順番どおりに実行
+      document.body.appendChild(script);
+    }
   }
 })();
 </script>
