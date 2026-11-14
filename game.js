@@ -179,10 +179,36 @@ const THEMES = {
     cols: ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b', '#20c997', '#f06595'],
     hair: ['#3b2a20', '#1e1e1e', '#7a4b2a', '#c98b3c', '#5c5c5c'],
     bg() {
-      c.fillStyle = '#f6e7cc'; c.fillRect(0, 0, W, SH);
-      c.strokeStyle = '#ead6b1'; c.lineWidth = 1;
-      for (let x = 0; x <= W; x += 30) line(x + .5, 0, x + .5, SH);
-      for (let y = 0; y <= SH; y += 30) line(0, y + .5, W, y + .5);
+      // 石畳（レンガ積みのタイル）
+      c.fillStyle = '#ecd8b3'; c.fillRect(0, 0, W, SH);
+      for (let r = 0, y = 0; y < SH; r++, y += 26) {
+        for (let x = (r % 2) ? -20 : 0; x < W; x += 40) {
+          c.fillStyle = (r * 7 + x) % 3 === 0 ? '#f4e4c4' : '#f7ead0';
+          rr(x + 2, y + 2, 36, 22, 5); c.fill();
+        }
+      }
+      // 木と植え込み
+      const tree = (x, y, s) => {
+        c.fillStyle = 'rgba(0,0,0,.14)'; ell(x + 4, y + 20 * s, 24 * s, 8 * s); c.fill();
+        c.fillStyle = '#8a5a35'; rr(x - 3 * s, y, 6 * s, 20 * s, 2); c.fill();
+        c.fillStyle = '#3f9c55'; circle(x, y - 6 * s, 20 * s); c.fill();
+        c.fillStyle = '#56b86a'; circle(x - 6 * s, y - 10 * s, 13 * s); c.fill();
+        c.fillStyle = '#7ad18a'; circle(x - 9 * s, y - 15 * s, 5 * s); c.fill();
+      };
+      const bed = (x, y, w) => {
+        c.fillStyle = 'rgba(0,0,0,.12)'; rr(x + 2, y + 4, w, 18, 6); c.fill();
+        c.fillStyle = '#b8794a'; rr(x, y, w, 18, 6); c.fill();
+        c.fillStyle = '#5cb96e'; rr(x + 3, y - 6, w - 6, 14, 7); c.fill();
+        const fl = ['#ff6b8a', '#fff36b', '#ffffff', '#ff9f43'];
+        for (let i = 0; i < w / 12; i++) { c.fillStyle = fl[i % 4]; circle(x + 8 + i * 12, y - 2 + (i % 2) * 4, 2.6); c.fill(); }
+      };
+      // タイトルのロゴ（右側 y≈224〜310）に隠れない位置に置く
+      tree(392, 236, 1); tree(300, 404, 0.75); tree(26, 250, 0.8);
+      bed(340, 392, 62);
+      // ベンチ
+      c.fillStyle = 'rgba(0,0,0,.12)'; rr(352, 344, 54, 10, 4); c.fill();
+      c.fillStyle = '#c98b52'; rr(350, 330, 54, 7, 3); c.fill(); rr(350, 340, 54, 7, 3); c.fill();
+      c.fillStyle = '#6b4a30'; c.fillRect(354, 347, 4, 6); c.fillRect(396, 347, 4, 6);
     },
     corridor() {
       c.fillStyle = '#e4d2ae';
@@ -201,24 +227,61 @@ const THEMES = {
       for (let y = DOOR_Y + 10; y < DOOR_Y + 22; y += 4) line(DOOR_X - 31, y, DOOR_X + 31, y);
     },
     store() {
-      c.fillStyle = 'rgba(0,0,0,.15)'; rr(STORE.x + 4, STORE.y + 6, STORE.w, STORE.h, 12); c.fill();
-      c.fillStyle = '#e35d5d'; rr(STORE.x, STORE.y, STORE.w, STORE.h, 12); c.fill();
-      // 床
-      c.fillStyle = '#f3d9a8'; rr(STORE.x + 9, STORE.y + 30, STORE.w - 18, STORE.h - 39, 6); c.fill();
-      c.strokeStyle = '#e8c890'; c.lineWidth = 1;
-      for (let y = STORE.y + 44; y < DOOR_Y - 9; y += 14) line(STORE.x + 9, y, STORE.x + STORE.w - 9, y);
-      // 入口の切れ目
-      c.fillStyle = '#f3d9a8'; c.fillRect(DOOR_X - DOOR_HALF, DOOR_Y - 10, DOOR_HALF * 2, 10);
-      // テーブル
-      for (const s of SEATS) {
-        c.fillStyle = 'rgba(0,0,0,.08)'; ell(s.x, s.y + 9, 10, 4); c.fill();
-        c.fillStyle = '#fffaf0'; circle(s.x, s.y + 6, 8); c.fill();
+      const X = STORE.x, Y = STORE.y, SW = STORE.w;
+      c.fillStyle = 'rgba(0,0,0,.18)'; rr(X + 5, Y + 8, SW, STORE.h, 12); c.fill();
+      c.fillStyle = '#8a5236'; rr(X, Y, SW, STORE.h, 12); c.fill();          // 木の外壁
+      c.fillStyle = '#a3643f'; rr(X + 3, Y + 3, SW - 6, STORE.h - 6, 10); c.fill();
+      // 床（フローリング）
+      c.save(); rr(X + 9, Y + 30, SW - 18, STORE.h - 39, 6); c.clip();
+      for (let i = 0, y = Y + 30; y < DOOR_Y; i++, y += 12) {
+        c.fillStyle = i % 2 ? '#f0d29c' : '#f6dcab'; c.fillRect(X + 9, y, SW - 18, 12);
+        c.fillStyle = 'rgba(150,100,50,.18)';
+        for (let x = X + 9 + (i * 37) % 60; x < X + SW; x += 60) c.fillRect(x, y, 1.5, 12);
       }
-      // 看板
+      c.restore();
+      // 入口の切れ目
+      c.fillStyle = '#f6dcab'; c.fillRect(DOOR_X - DOOR_HALF, DOOR_Y - 10, DOOR_HALF * 2, 10);
+      // 椅子と、2人席ごとの小さなテーブル
+      SEATS.forEach((s, i) => {
+        c.fillStyle = 'rgba(0,0,0,.10)'; ell(s.x, s.y + 10, 10, 3.5); c.fill();
+        c.fillStyle = '#2f9e8f'; rr(s.x - 8, s.y - 2, 16, 13, 4); c.fill();
+        c.fillStyle = '#41b8a6'; rr(s.x - 8, s.y + 3, 16, 8, 4); c.fill();
+        const col = i % 7;
+        if (col % 2 === 0 && col < 6) {
+          const tx = s.x + 15, ty = s.y + 3;
+          c.fillStyle = 'rgba(0,0,0,.12)'; ell(tx, ty + 7, 6, 2.5); c.fill();
+          c.fillStyle = '#7a4b2a'; circle(tx, ty, 6); c.fill();
+          c.fillStyle = '#9c6236'; circle(tx - 1, ty - 1, 4.6); c.fill();
+          c.fillStyle = '#fff'; circle(tx, ty - 1, 2.2); c.fill();
+          c.fillStyle = '#6b3d1e'; circle(tx, ty - 1, 1.2); c.fill();
+        }
+      });
+      // オーニング（ストライプの日よけ）
+      const aw = Y + 4, ah = 22, n = 12, sw = (SW - 8) / n;
+      c.fillStyle = 'rgba(0,0,0,.15)'; c.fillRect(X + 4, aw + ah, SW - 8, 4);
+      for (let i = 0; i < n; i++) {
+        const x = X + 4 + i * sw;
+        c.fillStyle = i % 2 ? '#fff6ea' : '#e8454a';
+        c.beginPath(); c.moveTo(x, aw); c.lineTo(x + sw, aw); c.lineTo(x + sw, aw + ah);
+        c.arc(x + sw / 2, aw + ah, sw / 2, 0, Math.PI); c.closePath(); c.fill();
+      }
+      // 看板（カップのアイコン付き）
       c.font = `800 14px ${FONT}`;
-      const tw = c.measureText(STORE.name).width + 26;
-      c.fillStyle = '#fff'; rr(DOOR_X - tw / 2, STORE.y + 4, tw, 22, 11); c.fill();
-      text(STORE.name, DOOR_X, STORE.y + 15.5, `800 14px ${FONT}`, '#e35d5d');
+      const tw = c.measureText(STORE.name).width + 46;
+      c.fillStyle = 'rgba(0,0,0,.2)'; rr(DOOR_X - tw / 2 + 2, Y - 6, tw, 26, 13); c.fill();
+      c.fillStyle = '#3b2a20'; rr(DOOR_X - tw / 2, Y - 8, tw, 26, 13); c.fill();
+      c.strokeStyle = '#ffd36b'; c.lineWidth = 2; rr(DOOR_X - tw / 2 + 3, Y - 5, tw - 6, 20, 10); c.stroke();
+      const cx = DOOR_X - tw / 2 + 17, cy = Y + 5;
+      c.fillStyle = '#fff'; rr(cx - 5, cy - 4, 10, 9, 2); c.fill();
+      c.strokeStyle = '#fff'; c.lineWidth = 1.6; c.beginPath(); c.arc(cx + 5, cy, 2.6, -Math.PI / 2, Math.PI / 2); c.stroke();
+      text(STORE.name, DOOR_X + 9, Y + 5.5, `800 14px ${FONT}`, '#ffd36b');
+      // 入口わきの鉢植え
+      for (const px of [DOOR_X - 52, DOOR_X + 52]) {
+        c.fillStyle = 'rgba(0,0,0,.15)'; ell(px + 2, DOOR_Y + 22, 10, 3.5); c.fill();
+        c.fillStyle = '#d9773f'; rr(px - 7, DOOR_Y + 8, 14, 13, 3); c.fill();
+        c.fillStyle = '#3f9c55'; circle(px, DOOR_Y + 4, 9); c.fill();
+        c.fillStyle = '#62c072'; circle(px - 3, DOOR_Y + 1, 5); c.fill();
+      }
     },
     door(k) {
       const [lx, rx] = doorPanels(k);
@@ -256,13 +319,21 @@ const THEMES = {
     person(p, x, y, walk, t) {
       const T = THEMES.pop;
       const bob = walk ? -Math.abs(Math.sin(t * 12 + p.seed)) * 3 : Math.sin(t * 2 + p.seed) * 0.6;
+      const OL = '#4a3426';
       c.fillStyle = 'rgba(0,0,0,.18)'; ell(x, y + 10, 10, 3.5); c.fill();
-      c.fillStyle = T.cols[p.c % T.cols.length]; rr(x - 9, y - 3 + bob, 18, 14, 7); c.fill();
+      c.lineWidth = 1.6; c.strokeStyle = OL;
+      c.fillStyle = T.cols[p.c % T.cols.length]; rr(x - 9, y - 3 + bob, 18, 14, 7); c.fill(); c.stroke();
+      c.fillStyle = 'rgba(255,255,255,.28)'; rr(x - 6, y - 1 + bob, 6, 4, 2); c.fill();   // 服のハイライト
       c.fillStyle = SKIN[p.h % SKIN.length]; circle(x, y - 9 + bob, 8); c.fill();
       c.fillStyle = T.hair[p.h % T.hair.length];
       c.beginPath(); c.arc(x, y - 10 + bob, 8.4, Math.PI * 1.02, Math.PI * 1.98); c.closePath(); c.fill();
+      if (p.h % 3 === 0) { circle(x + 6, y - 13 + bob, 3.4); c.fill(); }               // 髪型のバリエーション
+      circle(x, y - 9 + bob, 8.2); c.stroke();
+      const blink = Math.sin(t * 1.3 + p.seed * 7) > 0.97;
       c.fillStyle = '#222';
-      circle(x - 3, y - 7 + bob, 1.2); c.fill(); circle(x + 3, y - 7 + bob, 1.2); c.fill();
+      if (blink) { c.fillRect(x - 4.2, y - 7.3 + bob, 2.4, 0.9); c.fillRect(x + 1.8, y - 7.3 + bob, 2.4, 0.9); }
+      else { circle(x - 3, y - 7 + bob, 1.3); c.fill(); circle(x + 3, y - 7 + bob, 1.3); c.fill(); }
+      c.fillStyle = 'rgba(255,110,110,.45)'; ell(x - 5, y - 4.5 + bob, 1.8, 1.1); c.fill(); ell(x + 5, y - 4.5 + bob, 1.8, 1.1); c.fill();
     },
     player(x, y, a) {
       c.fillStyle = 'rgba(0,0,0,.2)'; ell(x, y + 18, 16, 5); c.fill();
@@ -298,6 +369,26 @@ const THEMES = {
       const lx = DOOR_X + GATE_HALF + 18, ly = GATE_Y - 14;
       c.fillStyle = k > 0.5 ? '#2fbf71' : '#e0533d'; c.strokeStyle = '#fff'; c.lineWidth = 2;
       circle(lx, ly, 6.5); c.fill(); c.stroke();
+      // 送り出しスピードのメーター（開けている間だけ表示）
+      if (k > 0.02 && g) {
+        const sp = Math.min(1, g.openT / g.D.ramp);
+        const mx = DOOR_X + GATE_HALF + 66, my = GATE_Y - 22, R = 22;
+        c.save(); c.globalAlpha = k;
+        c.fillStyle = 'rgba(0,0,0,.15)'; rr(mx - 31, my - 28, 62, 44, 10); c.fill();
+        c.fillStyle = '#fff'; rr(mx - 32, my - 30, 64, 44, 10); c.fill();
+        c.lineWidth = 6; c.lineCap = 'butt';
+        const segs = ['#51cf66', '#94d82d', '#fcc419', '#ff922b', '#f03e3e'];
+        segs.forEach((col, i) => {
+          c.strokeStyle = i / segs.length < sp ? col : '#e9e2d6';
+          c.beginPath(); c.arc(mx, my + 6, R - 6, Math.PI + i * Math.PI / 5 + .04, Math.PI + (i + 1) * Math.PI / 5 - .04); c.stroke();
+        });
+        const a = Math.PI + sp * Math.PI;
+        c.strokeStyle = '#2d2d2d'; c.lineWidth = 2.5; c.lineCap = 'round';
+        line(mx, my + 6, mx + Math.cos(a) * (R - 10), my + 6 + Math.sin(a) * (R - 10));
+        c.fillStyle = '#2d2d2d'; circle(mx, my + 6, 3); c.fill();
+        text('はやさ', mx, my - 22, `800 8px ${FONT}`, '#8a7a66');
+        c.restore();
+      }
     },
   },
 };
@@ -402,6 +493,16 @@ function judge() {
     addFloat('ぴったり！', fx, fy, T.ok, 20);
     addFloat(`+${pts}` + (g.combo >= 2 ? `  ${g.combo}コンボ` : ''), fx, fy + 24, T.ok, 14);
     SE('success', g.combo);
+    // 紙吹雪（店の入口と吹き出しから）
+    g.parts = g.parts || [];
+    const pc = ['#ff6b6b', '#fcc419', '#51cf66', '#4dabf7', '#cc5de8', '#ff922b'];
+    for (let i = 0; i < 46; i++) {
+      const fromBubble = i % 2;
+      const ox = fromBubble ? BUBBLE.x : DOOR_X, oy = fromBubble ? BUBBLE.y : DOOR_Y;
+      const a = rand(-Math.PI * 0.95, -Math.PI * 0.05), v = rand(120, 300);
+      g.parts.push({ x: ox, y: oy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, rot: rand(0, 6), vr: rand(-12, 12), col: pc[i % pc.length], t: 0, w: rand(4, 7) });
+    }
+    g.ring = { x: DOOR_X, y: DOOR_Y + 10, t: 0 };
   } else {
     g.combo = 0; g.miss++;
     addFloat(diff > 0 ? `${diff}人多い…` : `${-diff}人足りない…`, fx, fy, T.ng, 18);
@@ -575,6 +676,12 @@ function update(dt) {
     f.t += dt; f.y -= 22 * dt;
     if (f.t > 1.3) g.floats.splice(i, 1);
   }
+  if (g.parts) for (let i = g.parts.length - 1; i >= 0; i--) {
+    const p = g.parts[i];
+    p.t += dt; p.vy += 520 * dt; p.vx *= 1 - dt * 1.5; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+    if (p.t > 1.6) g.parts.splice(i, 1);
+  }
+  if (g.ring) { g.ring.t += dt; if (g.ring.t > 0.6) g.ring = null; }
 }
 
 // ============================================================
@@ -657,7 +764,36 @@ function drawOrange() {
 
 function drawHUD() {
   const hd = T.hud;
-  c.fillStyle = hd.bg; c.fillRect(0, 0, W, HUD);
+  const grd = c.createLinearGradient(0, 0, 0, HUD);
+  grd.addColorStop(0, '#ff9440'); grd.addColorStop(1, '#ff6a1f');
+  c.fillStyle = grd; c.fillRect(0, 0, W, HUD);
+  c.fillStyle = '#d9520c'; c.fillRect(0, HUD - 3, W, 3);
+  if (!g.endless) {
+    // 残り時間：円形タイマー
+    const t = Math.max(0, g.time), hurry = t <= 10;
+    const cx = 25, cy = 24, R = 15;
+    c.fillStyle = 'rgba(0,0,0,.18)'; circle(cx, cy, R + 2); c.fill();
+    c.strokeStyle = hurry ? '#ff4d4d' : '#fff36b'; c.lineWidth = 5; c.lineCap = 'round';
+    c.beginPath(); c.arc(cx, cy, R - 2, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * t / g.TM.time); c.stroke();
+    c.strokeStyle = '#fff'; c.lineWidth = 2;
+    line(cx, cy, cx, cy - 6); line(cx, cy, cx + 4, cy + 2);
+    text('のこり', 48, 13, `500 10px ${FONT}`, hd.sub, 'left');
+    text(t.toFixed(1), 48, 31, `800 22px ${FONT}`, hurry ? hd.accent : hd.text, 'left');
+    // スコア（白いピル）
+    c.fillStyle = 'rgba(255,255,255,.95)'; rr(W / 2 - 52, 6, 104, 36, 18); c.fill();
+    text('スコア', W / 2, 15, `800 9px ${FONT}`, '#ff7a1a');
+    text(String(g.score), W / 2, 31, `800 20px ${FONT}`, '#2d2d2d');
+    const rx = W - 52;
+    if (g.combo >= 2) {
+      c.fillStyle = '#fff36b'; rr(rx - 70, 9, 74, 30, 15); c.fill();
+      text(`×${g.combo}`, rx - 33, 20, `800 15px ${FONT}`, '#e8454a');
+      text('コンボ', rx - 33, 33, `800 8px ${FONT}`, '#b85a00');
+    } else {
+      text('ハイスコア', rx, 13, `500 10px ${FONT}`, hd.sub, 'right');
+      text(String(getHi()), rx, 31, `800 18px ${FONT}`, hd.text, 'right');
+    }
+    return;
+  }
   if (hd.line) { c.fillStyle = hd.line; c.fillRect(0, HUD - 1, W, 1); }
   if (g.endless) {
     // エンドレス: ライフ表示
@@ -752,7 +888,29 @@ function draw() {
   drawRequest();
   drawOrange();
 
-  for (const f of g.floats) outlinedText(f.str, f.x, f.y, f.size, f.color, f.t > 0.9 ? Math.max(0, 1 - (f.t - 0.9) / 0.4) : 1);
+  if (g.ring) {
+    const k = g.ring.t / 0.6;
+    c.save(); c.globalAlpha = 1 - k; c.strokeStyle = '#fff36b'; c.lineWidth = 6 * (1 - k) + 1;
+    circle(g.ring.x, g.ring.y, 10 + k * 70); c.stroke(); c.restore();
+  }
+  if (g.parts) for (const p of g.parts) {
+    c.save(); c.translate(p.x, p.y); c.rotate(p.rot); c.globalAlpha = Math.min(1, (1.6 - p.t) * 2);
+    c.fillStyle = p.col; c.fillRect(-p.w / 2, -p.w * 0.3, p.w, p.w * 0.6); c.restore();
+  }
+  for (const f of g.floats) {
+    const pop = 1 + 0.5 * Math.max(0, 1 - f.t * 6);   // 出た瞬間にポンと大きく
+    const a = f.t > 0.9 ? Math.max(0, 1 - (f.t - 0.9) / 0.4) : 1;
+    if (f.size >= 20 && f.color === T.ok) {
+      // 「ぴったり！」はリボンの上に
+      c.save(); c.globalAlpha = a; c.translate(Math.min(f.x, W - 104), f.y); c.scale(pop, pop);
+      c.fillStyle = '#c92a2a'; c.beginPath(); c.moveTo(-82, -8); c.lineTo(-96, 0); c.lineTo(-82, 8); c.lineTo(-70, 0); c.fill();
+      c.beginPath(); c.moveTo(82, -8); c.lineTo(96, 0); c.lineTo(82, 8); c.lineTo(70, 0); c.fill();
+      c.fillStyle = '#f03e3e'; rr(-74, -17, 148, 34, 8); c.fill();
+      c.fillStyle = 'rgba(255,255,255,.25)'; rr(-70, -14, 140, 8, 4); c.fill();
+      text('★ ぴったり！ ★', 0, 1, `800 20px ${FONT}`, '#fff');
+      c.restore();
+    } else outlinedText(f.str, f.x, f.y, f.size * pop, f.color, a);
+  }
 
   if (state === 'count') {
     const n = Math.ceil(g.countdown - 0.4);
