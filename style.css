@@ -49,10 +49,10 @@ html, body {
 /* ---------- gate button ---------- */
 #gateBtn {
   position: absolute;
-  left: calc(8px * var(--s));
-  top: calc(604px * var(--s));
-  width: calc(118px * var(--s));
-  height: calc(112px * var(--s));
+  left: calc(18px * var(--s));
+  top: calc(708px * var(--s));
+  width: calc(384px * var(--s));
+  height: calc(88px * var(--s));
   border-radius: .8em;
   font: inherit;
   cursor: pointer;
@@ -124,14 +124,15 @@ html, body {
   flex-direction: column;
   justify-content: space-between;
   align-items: stretch;
-  padding: calc(150px * var(--s)) 1em 1em;
+  padding: calc(272px * var(--s)) 1em 1em;
   background: linear-gradient(to bottom, rgba(0,0,0,0) 55%, rgba(0,0,0,.4));
 }
 .overlay.center { align-items: center; background: rgba(0,0,0,.5); }
-.logo { text-align: center; }
+/* ロゴは通路の右側（何もない場所）に置いて、店・吹き出し・行列のプレビューを隠さない */
+.logo { text-align: center; align-self: flex-end; width: calc(230px * var(--s)); }
 .logo h1 {
   display: inline-block;
-  font-size: 2.5em; font-weight: 800; letter-spacing: .1em; line-height: 1.15;
+  font-size: 2.2em; font-weight: 800; letter-spacing: .08em; line-height: 1.15;
   padding: .12em .5em .16em;
   border-radius: .35em;
   color: var(--accent);
