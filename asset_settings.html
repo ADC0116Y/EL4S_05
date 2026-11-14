@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>画像の設定 - ぴったり入店ゲート</title>
+<style>
+  :root{ --bg:#f6f3ee; --ink:#2b2622; --muted:#7a7068; --line:#e2dcd3; --ok:#2f9e6b; }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic",system-ui,sans-serif;}
+  .wrap{max-width:720px;margin:0 auto;padding:16px 14px 28px;}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+  h1{font-size:20px;margin:0}
+  header a{font-size:13px;color:var(--ink)}
+  .lead{font-size:13px;color:var(--muted);margin:6px 0 14px;line-height:1.7}
+  .card{border:1px solid var(--line);border-radius:12px;background:#fff;padding:0 14px}
+  .arow{display:grid;grid-template-columns:150px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+  .arow:first-child{border-top:none}
+  .name{font-size:14px;font-weight:700}
+  .name small{display:block;color:var(--muted);font-size:11px;font-weight:400}
+  .pick{display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+  input[type=file]{font-size:12px;max-width:100%}
+  .thumbs{display:flex;gap:4px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)}
+  .thumbs img{height:32px;max-width:80px;object-fit:contain;background:#f1ede6;border-radius:4px}
+  .tag{font-size:10px;padding:1px 6px;border-radius:6px;background:#f1ede6;color:var(--muted)}
+  .tag.custom{background:#e6f5ee;color:#1f6f4b}
+  button{font-family:inherit;font-size:12px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer}
+  .foot{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  #note{min-height:1em}
+  @media (max-width:520px){ .arow{grid-template-columns:1fr auto} .pick{grid-column:1 / -1;grid-row:2} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>画像の設定</h1>
+    <a href="EL4S_05.html" target="_blank">ゲームを開く ↗</a>
+  </header>
+  <p class="lead">
+    ゲームで使う画像をパーツごとに選べます。選んだ画像はこのブラウザに保存され、ゲームを開くと使われます
+    （ゲームを開いたままでも、すぐ反映されます）。<br>
+    何も選んでいないパーツは <code>assets/config.js</code> に書かれた画像を使います。
+  </p>
+
+  <div class="card" id="rows"></div>
+
+  <div class="foot">
+    <button id="resetAll">すべて元に戻す</button>
+    <span id="note"></span>
+  </div>
+</div>
+
+<script src="assets/config.js"></script>
+<script>
+(() => {
+  const CFG = window.GAME_ASSETS || {};
+  // ゲーム側（EL4S_05.html）と同じキーで保存する
+  const KEY = k => 'gateImg:' + k;
+  const SLOTS = [
+    {key: 'store',      label: '店',           size: '290×150', def: [CFG.store]},
+    {key: 'queue',      label: '行列エリア',   size: '560×215', def: [CFG.queue]},
+    {key: 'bubble',     label: '吹き出し',     size: '300×140', def: [CFG.bubble]},
+    {key: 'gate',       label: 'ゲートのバー', size: '68×8',    def: [CFG.gate]},
+    {key: 'background', label: '背景',         size: '800×660', def: [CFG.background]},
+    {key: 'people',     label: '並ぶ人',       size: '24×28・複数選択可', def: CFG.people || [], multi: true},
+  ];
+  const rows = document.getElementById('rows');
+  const note = document.getElementById('note');
+  const thumbs = {};
+
+  function saved(key){
+    try { const v = JSON.parse(localStorage.getItem(KEY(key)) || 'null'); return Array.isArray(v) && v.length ? v : null; }
+    catch (e) { return null; }
+  }
+
+  function render(slot){
+    const custom = saved(slot.key);
+    const srcs = (custom || slot.def).filter(Boolean);
+    const box = thumbs[slot.key];
+    box.innerHTML = '';
+    const tag = document.createElement('span');
+    tag.className = 'tag' + (custom ? ' custom' : '');
+    tag.textContent = custom ? '指定中' : '標準';
+    box.appendChild(tag);
+    if (!srcs.length) { box.append('なし'); return; }
+    for (const s of srcs.slice(0, 8)) { const im = document.createElement('img'); im.src = s; im.alt = ''; box.appendChild(im); }
+    if (srcs.length > 8) box.append(`+${srcs.length - 8}`);
+  }
+
+  function readAsDataURL(file){
+    return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+  }
+
+  for (const slot of SLOTS) {
+    const row = document.createElement('div');
+    row.className = 'arow';
+    row.innerHTML = `<div class="name">${slot.label}<small>推奨 ${slot.size}</small></div>
+      <div class="pick"><input type="file" accept="image/*"${slot.multi ? ' multiple' : ''}><span class="thumbs"></span></div>
+      <button type="button">元に戻す</button>`;
+    const input = row.querySelector('input');
+    thumbs[slot.key] = row.querySelector('.thumbs');
+
+    input.addEventListener('change', async () => {
+      const files = [...input.files].filter(f => f.type.startsWith('image/'));
+      input.value = '';
+      if (!files.length) return;
+      const urls = await Promise.all(files.map(readAsDataURL));
+      try {
+        localStorage.setItem(KEY(slot.key), JSON.stringify(urls));
+        note.textContent = `「${slot.label}」を変更しました。`;
+      } catch (e) {
+        note.textContent = `「${slot.label}」の画像が大きすぎて保存できませんでした。小さい画像にしてください。`;
+      }
+      render(slot);
+    });
+    row.querySelector('button').addEventListener('click', () => {
+      try { localStorage.removeItem(KEY(slot.key)); } catch (e) {}
+      render(slot);
+      note.textContent = `「${slot.label}」を元に戻しました。`;
+    });
+    rows.appendChild(row);
+    render(slot);
+  }
+
+  document.getElementById('resetAll').addEventListener('click', () => {
+    for (const slot of SLOTS) { try { localStorage.removeItem(KEY(slot.key)); } catch (e) {} render(slot); }
+    note.textContent = 'すべて元の画像に戻しました。';
+  });
+})();
+</script>
+</body>
+</html>
