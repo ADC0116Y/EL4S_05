@@ -8,7 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<!-- style.css は下の読み込み処理で入れる。読み込み終わるまで画面を隠しておく -->
+<style id="boot">#stage{visibility:hidden}</style>
 </head>
 <body>
 <div id="stage">
@@ -44,6 +45,14 @@
             <button type="button" data-v="30">30秒</button>
             <button type="button" data-v="60">60秒</button>
             <button type="button" data-v="endless">エンドレス</button>
+          </div>
+        </div>
+        <div class="opt" data-key="sound">
+          <span class="tl">サウンド</span>
+          <div class="seg">
+            <button type="button" data-v="all">BGM＋効果音</button>
+            <button type="button" data-v="se">効果音のみ</button>
+            <button type="button" data-v="off">なし</button>
           </div>
         </div>
         <button id="startBtn" type="button" class="big">スタート</button>
@@ -136,7 +145,62 @@
     </div>
   </div>
 </div>
-<script src="ranking.js"></script>
-<script src="game.js"></script>
+<script>
+// ---- 読み込み処理 ----
+// GitHub Pages はファイルを最大10分ブラウザにキャッシュさせるため、プッシュしても古い版が出ることがある。
+// ここでは毎回サーバーに「更新があるか」を確認してから読み込むので、公開が終わればすぐ新しい版になる。
+// （更新がなければサーバーは「変更なし」と返すだけなので、通信量はほとんど増えない）
+(async () => {
+  const JS = ['ranking.js', 'sound.js', 'game.js'];   // この順に実行する
+  const get = async (url, cache) => {
+    const r = await fetch(url, { cache });
+    if (!r.ok) throw new Error(`${url}: ${r.status}`);
+    return r.text();
+  };
+  const ss = {
+    get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch { /* ignore */ } },
+    del(k) { try { sessionStorage.removeItem(k); } catch { /* ignore */ } },
+  };
+  const showPage = () => { const b = document.getElementById('boot'); if (b) b.remove(); };
+
+  // 1) このページ（HTML）自体が古いキャッシュなら、新しい版で1回だけ読み直す
+  try {
+    const cached = await get(location.href, 'force-cache');   // 今表示しているもの
+    const fresh = await get(location.href, 'no-cache');       // サーバーに確認した最新のもの（キャッシュも更新される）
+    if (cached !== fresh && !ss.get('pageReloaded')) {
+      ss.set('pageReloaded', '1');
+      location.reload();
+      return;
+    }
+  } catch { /* 確認できなければそのまま進む */ }
+  ss.del('pageReloaded');
+
+  // 2) CSS と JS も最新かどうかサーバーに確認して読み込む
+  try {
+    const [css, ...codes] = await Promise.all([get('style.css', 'no-cache'), ...JS.map(f => get(f, 'no-cache'))]);
+    const style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+    showPage();
+    codes.forEach((code, i) => {
+      const script = document.createElement('script');
+      script.textContent = code + `\n//# sourceURL=${JS[i]}`;
+      document.body.appendChild(script);
+    });
+  } catch {
+    // fetch が使えない環境（ファイルを直接開いた場合など）は普通に読み込む
+    const link = document.createElement('link');
+    link.rel = 'stylesheet'; link.href = 'style.css';
+    link.onload = showPage; link.onerror = showPage;
+    document.head.appendChild(link);
+    for (const f of JS) {
+      const script = document.createElement('script');
+      script.src = f; script.async = false;   // 順番どおりに実行
+      document.body.appendChild(script);
+    }
+  }
+})();
+</script>
 </body>
 </html>
