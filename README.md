@@ -14,7 +14,23 @@
 ビルド不要の静的ファイルです。GitHub Pages でそのまま公開できます。
 
 - `index.html`:画面構成
-- `style.css`:レイアウトとテーマ別の配色
+- `style.css`:レイアウトと配色
 - `game.js`:ゲームロジックと Canvas 描画
+- `ranking.js`:オンラインランキング(Firebase Cloud Firestore)
+- `ranking_config.js`:ランキングの接続設定(Firebase の値を貼る場所)
+- `firestore.rules`:ランキングのデータを守るセキュリティルール
 
-見た目のテーマはタイトル画面で切り替えられます(線画 / ポップ / ネオン)。URL に `?theme=simple`、`?theme=pop`、`?theme=neon` を付けて指定することもできます。
+見た目はポップで固定です。
+
+## オンラインランキングの設定
+
+ランキングは「難易度 × 時間」の組み合わせごとに、上位10件を全員で共有します。
+`ranking_config.js` が空のままの間は、その端末(ブラウザ)の中だけに保存するランキングとして動きます。設定を入れるとオンラインに切り替わります。
+
+1. [Firebase コンソール](https://console.firebase.google.com/) でプロジェクトを作る(Google アナリティクスはオフで可)
+2. 「構築 → Firestore Database」でデータベースを作成する(ロケーションは `asia-northeast1` など)
+3. Firestore の「ルール」タブに `firestore.rules` の中身を貼り付けて「公開」する
+4. プロジェクトの設定 →「マイアプリ」でウェブアプリ(`</>`)を追加し、表示された `firebaseConfig` の `apiKey`・`authDomain`・`projectId`・`appId` を `ranking_config.js` に貼る
+5. プッシュすれば GitHub Pages 上でランキングが動きます
+
+注意:ブラウザだけで動くゲームなので、スコアの改ざんを完全には防げません。ルールで名前の長さや数値の範囲は制限していますが、不正な記録が入った場合は Firebase コンソールから削除してください。

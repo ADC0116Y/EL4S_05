@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="68" height="8" viewBox="0 0 68 8">
-  <!-- ゲートのバー（紅白の縞） -->
-  <rect x="0" y="0" width="68" height="8" rx="2" fill="#e0533d"/>
-  <g fill="#ffffff">
-    <path d="M8 0h6l-4 8H4z"/><path d="M22 0h6l-4 8h-6z"/><path d="M36 0h6l-4 8h-6z"/><path d="M50 0h6l-4 8h-6z"/>
-  </g>
-</svg>

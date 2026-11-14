@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="144" height="18" viewBox="0 0 144 18">
-  <!-- 自動ドアの戸袋（左右の壁）とレール。真ん中の 68px が出入口 -->
-  <rect x="0" y="0" width="38" height="18" fill="#0e4762"/>
-  <rect x="106" y="0" width="38" height="18" fill="#0e4762"/>
-  <rect x="4" y="8" width="136" height="2" fill="#c9d1d6"/>
-</svg>

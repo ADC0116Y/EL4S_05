@@ -46,18 +46,13 @@
             <button type="button" data-v="endless">エンドレス</button>
           </div>
         </div>
-        <div class="opt" data-key="theme">
-          <span class="tl">テーマ</span>
-          <div class="seg">
-            <button type="button" data-v="simple">線画</button>
-            <button type="button" data-v="pop">ポップ</button>
-            <button type="button" data-v="neon">ネオン</button>
-          </div>
-        </div>
         <button id="startBtn" type="button" class="big">スタート</button>
         <div class="foot">
           <span class="hi">ハイスコア <b id="hiTitle">0</b></span>
-          <button id="helpBtn" type="button" class="help">？ 遊び方</button>
+          <span class="foot-btns">
+            <button id="rankBtn" type="button" class="help">ランキング</button>
+            <button id="helpBtn" type="button" class="help">？ 遊び方</button>
+          </span>
         </div>
       </div>
     </div>
@@ -76,6 +71,32 @@
           <li>エンドレスはミス3回で終了</li>
         </ul>
         <button id="helpClose" type="button" class="big">とじる</button>
+      </div>
+    </div>
+
+    <!-- ランキング -->
+    <div id="ranking" class="overlay center hidden">
+      <div class="panel rank-panel">
+        <h2>ランキング</h2>
+        <div class="opt-r" data-rkey="diff">
+          <span class="tl">難易度</span>
+          <div class="seg">
+            <button type="button" data-v="easy">やさしい</button>
+            <button type="button" data-v="normal">ふつう</button>
+            <button type="button" data-v="hard">むずかしい</button>
+          </div>
+        </div>
+        <div class="opt-r" data-rkey="time">
+          <span class="tl">時間</span>
+          <div class="seg">
+            <button type="button" data-v="30">30秒</button>
+            <button type="button" data-v="60">60秒</button>
+            <button type="button" data-v="endless">エンドレス</button>
+          </div>
+        </div>
+        <ol id="rankList" class="rank-list"></ol>
+        <p id="rankState" class="rank-msg"></p>
+        <button id="rankClose" type="button" class="big">とじる</button>
       </div>
     </div>
 
@@ -101,12 +122,22 @@
           <div><dt>ミス</dt><dd id="rMiss">0回</dd></div>
           <div><dt>最大コンボ</dt><dd id="rCombo">0</dd></div>
         </dl>
+        <div id="rankBox" class="rank-box hidden">
+          <form id="rankForm" class="rank-form" autocomplete="off">
+            <input id="rankName" type="text" maxlength="12" placeholder="なまえ（12文字まで）" enterkeyhint="send">
+            <button id="rankSend" type="submit">ランキングに登録</button>
+          </form>
+          <p id="rankMsg" class="rank-msg"></p>
+          <ol id="rankListResult" class="rank-list small"></ol>
+        </div>
         <button id="retryBtn" type="button" class="big">もう一度</button>
         <button id="toTitleBtn" type="button" class="sub">タイトルへ</button>
       </div>
     </div>
   </div>
 </div>
+<script src="ranking_config.js"></script>
+<script src="ranking.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

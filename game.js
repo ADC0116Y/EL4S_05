@@ -22,6 +22,8 @@ const WALK = 230;                                    // 案内中の歩く速さ
 const SEAT_WALK = 150;                               // 店内で席へ歩く速さ px/s
 const QUEUE_SPEED = 420;                             // 行列が詰める速さ px/s
 const MAX_INSIDE = 40;                               // 店内に表示しておく人数
+const STAY_MIN = 4, STAY_MAX = 9;                     // 席に座ってから帰るまでの秒数
+const EXIT_WALK = 120;                                // 帰る人の歩く速さ px/s
 const FONT = '"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",sans-serif';
 const HI_KEY = 'gyoretsu-hiscores', SETTINGS_KEY = 'gyoretsu-settings';
 
@@ -64,6 +66,8 @@ const QBOX = { x: 18, y: 430, w: 384, h: 210 };
 const QBOX_B = QBOX.y + QBOX.h, QBOX_R = QBOX.x + QBOX.w;
 const GATE_Y = QBOX.y, GATE_HALF = 28;
 const BUBBLE = { x: 346, y: 104, w: 140, h: 86 };
+const EXIT_Y = STORE.y + 89;                    // 店の左の壁にある出口の高さ（席の2段目と3段目の間）
+const EXIT_HALF = 12;
 const PLAYER = { x: 90, y: 384 };
 const ORANGE = { x: 84, y: 296, w: 110, h: 58 };
 
@@ -160,69 +164,10 @@ function doorPanels(k) {
 }
 
 // ============================================================
-//  見た目テーマ（3パターン）
+//  見た目テーマ（ポップで固定）
 // ============================================================
 const SKIN = ['#ffdcb8', '#f3c49b', '#e0ad84', '#ffe6cc'];
 const THEMES = {
-  // ---------------- 線画：ラフ画に近いシンプルな線 ----------------
-  simple: {
-    page: '#e8e6df',
-    hud: { bg: '#fff', text: '#111', sub: '#888', accent: '#e5332a', barBg: '#e5e5e5', bar: '#111', line: '#111' },
-    bubbleShape: 'ellipse',
-    req: { fill: '#fff', stroke: '#111', lw: 2.5, text: '#111', sub: '#555' },
-    org: { fill: '#fff', stroke: '#f08a24', lw: 2.5, text: '#111', sub: '#f08a24' },
-    ok: '#1f9d55', ng: '#e5332a', outline: '#fff', count: '#111',
-    bg() { c.fillStyle = '#fff'; c.fillRect(0, 0, W, SH); },
-    corridor() {
-      c.strokeStyle = '#ccc'; c.lineWidth = 2; c.setLineDash([6, 6]);
-      line(DOOR_X - CORR_HALF, DOOR_Y + 6, DOOR_X - CORR_HALF, GATE_Y - 6);
-      line(DOOR_X + CORR_HALF, DOOR_Y + 6, DOOR_X + CORR_HALF, GATE_Y - 6);
-      c.setLineDash([]);
-    },
-    store() {
-      c.strokeStyle = '#e2e2e2'; c.lineWidth = 2;
-      for (const s of SEATS) { circle(s.x, s.y + 6, 9); c.stroke(); }
-      c.strokeStyle = '#111'; c.lineWidth = 4; c.lineJoin = 'miter';
-      storeWallPath(); c.stroke();
-      text(STORE.name, DOOR_X, STORE.y + 18, `800 14px ${FONT}`, '#999');
-    },
-    door(k) {
-      const [lx, rx] = doorPanels(k);
-      c.strokeStyle = '#111'; c.lineWidth = 3; c.lineCap = 'butt';
-      line(DOOR_X - DOOR_HALF, DOOR_Y - 8, DOOR_X - DOOR_HALF, DOOR_Y + 8);
-      line(DOOR_X + DOOR_HALF, DOOR_Y - 8, DOOR_X + DOOR_HALF, DOOR_Y + 8);
-      c.lineWidth = 2.5;
-      line(lx, DOOR_Y - 3, lx + DOOR_HALF, DOOR_Y - 3);
-      line(rx, DOOR_Y + 3, rx + DOOR_HALF, DOOR_Y + 3);
-    },
-    queueArea() {
-      c.strokeStyle = '#111'; c.lineWidth = 3; c.lineCap = 'butt'; c.lineJoin = 'miter';
-      queueWallPath(); c.stroke();
-      c.strokeStyle = '#e5332a'; c.lineWidth = 3;
-      for (const d of DIVS) line(d.x0, d.y, d.x1, d.y);
-    },
-    person(p, x, y) {
-      c.fillStyle = '#fff'; c.strokeStyle = '#111'; c.lineWidth = 2.6;
-      ell(x, y, 12, 9); c.fill(); c.stroke();
-    },
-    player(x, y, a) {
-      c.strokeStyle = '#f08a24'; c.lineWidth = 3; c.fillStyle = '#fff';
-      circle(x, y - 36, 10); c.fill(); c.stroke();
-      ell(x, y, 13, 24); c.fill(); c.stroke();
-      c.lineWidth = 3; c.lineCap = 'round';
-      line(x + 11, y - 10, x + 26, y - 10 - a * 14);
-      for (const [i, ch] of ['あ', 'な', 'た'].entries()) text(ch, x, y - 12 + i * 12, `800 11px ${FONT}`, '#f08a24');
-    },
-    gate(k) {
-      const len = GATE_HALF * 2 * (1 - k);
-      c.fillStyle = '#dfe6ff'; c.strokeStyle = '#2f49d1'; c.lineWidth = 3;
-      if (len > 1) { c.fillRect(DOOR_X - GATE_HALF, GATE_Y - 5, len, 10); c.strokeRect(DOOR_X - GATE_HALF, GATE_Y - 5, len, 10); }
-      c.fillStyle = '#2f49d1';
-      circle(DOOR_X - GATE_HALF, GATE_Y, 4); c.fill(); circle(DOOR_X + GATE_HALF, GATE_Y, 4); c.fill();
-      text('ゲート', DOOR_X + GATE_HALF + 24, GATE_Y - 12, `500 10px ${FONT}`, '#555');
-    },
-  },
-
   // ---------------- ポップ：明るい色のお店 ----------------
   pop: {
     page: '#ffd9a8',
@@ -282,9 +227,6 @@ const THEMES = {
         c.strokeStyle = '#7d8a92'; c.lineWidth = 1.5; c.strokeRect(x + .75, DOOR_Y - 8.25, DOOR_HALF - 1.5, 6.5);
         c.fillStyle = 'rgba(255,255,255,.7)'; c.fillRect(x + 5, DOOR_Y - 7, DOOR_HALF * 0.35, 1.5);
       }
-      // センサー
-      c.fillStyle = '#2b2622'; rr(DOOR_X - 10, DOOR_Y - 24, 20, 8, 3); c.fill();
-      c.fillStyle = k > 0.3 ? '#5fe39a' : '#ff6b57'; circle(DOOR_X, DOOR_Y - 20, 2.4); c.fill();
     },
     queueArea() {
       c.fillStyle = 'rgba(255,255,255,.4)';
@@ -358,88 +300,6 @@ const THEMES = {
       circle(lx, ly, 6.5); c.fill(); c.stroke();
     },
   },
-
-  // ---------------- ネオン：夜のお店 ----------------
-  neon: {
-    page: '#05060d',
-    hud: { bg: '#0b0e1f', text: '#eaf2ff', sub: '#7c88b8', accent: '#ff4fd8', barBg: '#1b2140', bar: '#3df2ff', line: '#3df2ff55' },
-    bubbleShape: 'round',
-    req: { fill: '#0c1026', stroke: '#3df2ff', lw: 2, text: '#fff', sub: '#8fa0d8', glow: '#3df2ff' },
-    org: { fill: '#0c1026', stroke: '#ff9a3d', lw: 2, text: '#ffb36b', sub: '#ff9a3d', glow: '#ff9a3d' },
-    ok: '#b4ff39', ng: '#ff3b6b', outline: '#05060d', count: '#3df2ff',
-    cols: ['#3df2ff', '#ff4fd8', '#b4ff39', '#ffd23d', '#9d7bff', '#ff7b3d'],
-    bg() {
-      c.fillStyle = '#0a0c1a'; c.fillRect(0, 0, W, SH);
-      c.strokeStyle = 'rgba(61,242,255,.07)'; c.lineWidth = 1;
-      for (let x = 0; x <= W; x += 24) line(x + .5, 0, x + .5, SH);
-      for (let y = 0; y <= SH; y += 24) line(0, y + .5, W, y + .5);
-    },
-    corridor() {
-      c.fillStyle = '#121733';
-      c.fillRect(DOOR_X - CORR_HALF, DOOR_Y, CORR_HALF * 2, GATE_Y - DOOR_Y);
-      c.strokeStyle = 'rgba(255,79,216,.55)'; c.lineWidth = 2; c.setLineDash([10, 12]);
-      line(DOOR_X, DOOR_Y + 8, DOOR_X, GATE_Y - 8);
-      c.setLineDash([]);
-    },
-    store() {
-      c.fillStyle = '#141936'; rr(STORE.x, STORE.y, STORE.w, STORE.h, 10); c.fill();
-      c.strokeStyle = 'rgba(61,242,255,.25)'; c.lineWidth = 1.5;
-      for (const s of SEATS) { circle(s.x, s.y + 6, 8); c.stroke(); }
-      glow('#ff4fd8', 14); c.strokeStyle = '#ff4fd8'; c.lineWidth = 2.5; c.lineJoin = 'round';
-      storeWallPath(3); c.stroke();
-      text(STORE.name, DOOR_X, STORE.y + 18, `800 15px ${FONT}`, '#ff4fd8');
-      noGlow();
-    },
-    door(k) {
-      const [lx, rx] = doorPanels(k);
-      if (k > 0.05) {
-        const gr = c.createLinearGradient(0, DOOR_Y, 0, DOOR_Y + 50);
-        gr.addColorStop(0, `rgba(255,224,102,${0.4 * k})`); gr.addColorStop(1, 'rgba(255,224,102,0)');
-        c.fillStyle = gr; c.fillRect(DOOR_X - DOOR_HALF, DOOR_Y, DOOR_HALF * 2, 50);
-      }
-      glow('#3df2ff', 10); c.strokeStyle = '#3df2ff'; c.lineWidth = 3;
-      line(lx + 2, DOOR_Y - 3, lx + DOOR_HALF - 2, DOOR_Y - 3);
-      line(rx + 2, DOOR_Y - 3, rx + DOOR_HALF - 2, DOOR_Y - 3);
-      noGlow();
-    },
-    queueArea() {
-      glow('#3df2ff', 10); c.strokeStyle = '#3df2ff'; c.lineWidth = 2.5; c.lineJoin = 'round';
-      queueWallPath(); c.stroke();
-      glow('#ff3b6b', 10); c.strokeStyle = '#ff3b6b'; c.lineWidth = 2.5;
-      c.beginPath();
-      for (const d of DIVS) { c.moveTo(d.x0, d.y); c.lineTo(d.x1, d.y); }
-      c.stroke();
-      noGlow();
-    },
-    person(p, x, y, walk, t) {
-      const T = THEMES.neon;
-      const col = T.cols[p.c % T.cols.length];
-      const bob = walk ? -Math.abs(Math.sin(t * 12 + p.seed)) * 2 : 0;
-      c.fillStyle = '#0f1430'; ell(x, y + bob, 11, 9); c.fill();
-      c.strokeStyle = col; c.globalAlpha = .25; c.lineWidth = 6; c.stroke();
-      c.globalAlpha = 1; c.lineWidth = 2; c.stroke();
-      c.fillStyle = col; circle(x, y - 1 + bob, 3); c.fill();
-    },
-    player(x, y, a) {
-      glow('#ff9a3d', 14); c.strokeStyle = '#ff9a3d'; c.lineWidth = 2.5; c.fillStyle = '#1a1230';
-      circle(x, y - 34, 10); c.fill(); c.stroke();
-      ell(x, y, 13, 22); c.fill(); c.stroke();
-      c.lineCap = 'round'; line(x + 11, y - 8, x + 26, y - 8 - a * 14);
-      for (const [i, ch] of ['あ', 'な', 'た'].entries()) text(ch, x, y - 12 + i * 12, `800 11px ${FONT}`, '#ffb36b');
-      noGlow();
-    },
-    gate(k) {
-      const len = GATE_HALF * 2 * (1 - k);
-      glow('#4d7bff', 14); c.strokeStyle = '#6f95ff'; c.lineWidth = 3; c.fillStyle = '#121a44';
-      if (len > 1) { rr(DOOR_X - GATE_HALF, GATE_Y - 4, len, 8, 4); c.fill(); c.stroke(); }
-      c.fillStyle = '#6f95ff';
-      circle(DOOR_X - GATE_HALF, GATE_Y, 4.5); c.fill(); circle(DOOR_X + GATE_HALF, GATE_Y, 4.5); c.fill();
-      const lx = DOOR_X + GATE_HALF + 18, ly = GATE_Y - 14;
-      const col = k > 0.5 ? '#b4ff39' : '#ff3b6b';
-      glow(col, 12); c.fillStyle = col; circle(lx, ly, 5); c.fill();
-      noGlow();
-    },
-  },
 };
 
 // ============================================================
@@ -450,7 +310,7 @@ const settings = { diff: 'normal', time: '60', theme: 'pop' };
 try { Object.assign(settings, JSON.parse(store.get(SETTINGS_KEY, '{}'))); } catch { /* ignore */ }
 if (!DIFFS[settings.diff]) settings.diff = 'normal';
 if (!TIMES[settings.time]) settings.time = '60';
-if (!THEMES[settings.theme]) settings.theme = 'pop';
+settings.theme = 'pop';   // 見た目はポップで固定
 let T = THEMES[settings.theme];
 let state = 'title';          // title（デモ） | count | play | pause | over
 let g = null;
@@ -518,7 +378,7 @@ function releaseOne() {
 // 店に入った人は空いている席へ歩いていく（見た目だけ）
 function enterStore(w) {
   const seat = SEATS[g.seatOrder[g.seatIdx++ % SEATS.length]];
-  g.inside.push({ ...w, sx: seat.x + rand(-3, 3), sy: seat.y + rand(-2, 2) });
+  g.inside.push({ ...w, sx: seat.x + rand(-3, 3), sy: seat.y + rand(-2, 2), stay: rand(STAY_MIN, STAY_MAX), leaving: 0 });
   if (g.inside.length > MAX_INSIDE) g.inside.shift();
 }
 
@@ -655,11 +515,26 @@ function update(dt) {
       if (g.req) { g.req.arrived++; checkJudge(); }
     }
   }
-  // 店内の人（席へ歩く）
-  for (const p of g.inside) {
+  // 店内の人（席へ歩く → しばらく座る → 左の出口から帰る）
+  for (let i = g.inside.length - 1; i >= 0; i--) {
+    const p = g.inside[i];
+    if (p.leaving) {
+      // 1: 出口の手前へ → 2: 出口を抜けて画面の外へ
+      const tx = p.leaving === 1 ? STORE.x + 22 : -24, ty = EXIT_Y;
+      const dx = tx - p.x, dy = ty - p.y, dist = Math.hypot(dx, dy);
+      const m = Math.min(dist, EXIT_WALK * dt);
+      if (dist > 0.5) { p.x += dx / dist * m; p.y += dy / dist * m; }
+      p.walking = true;
+      if (dist <= 0.5) {
+        if (p.leaving === 1) p.leaving = 2;
+        else g.inside.splice(i, 1);
+      }
+      continue;
+    }
     const dx = p.sx - p.x, dy = p.sy - p.y, dist = Math.hypot(dx, dy);
     p.walking = dist > 1;
     if (p.walking) { const m = Math.min(dist, SEAT_WALK * dt); p.x += dx / dist * m; p.y += dy / dist * m; }
+    else if ((p.stay -= dt) <= 0) p.leaving = 1;
     if (p.y > DOOR_Y - 26) nearDoor = true;
   }
 
@@ -810,6 +685,19 @@ function outlinedText(str, x, y, size, color, alpha = 1) {
   c.restore();
 }
 
+// 店の左の壁の出口（帰る人がここから出ていく）
+function drawExit() {
+  c.fillStyle = '#f3d9a8';
+  c.fillRect(STORE.x - 1, EXIT_Y - EXIT_HALF, 11, EXIT_HALF * 2);
+  c.fillStyle = 'rgba(0,0,0,.12)';
+  c.fillRect(STORE.x - 1, EXIT_Y - EXIT_HALF, 11, 2);
+  // 「出口」の縦看板（壁の外側）
+  const sx = STORE.x - 22, sy = EXIT_Y - 44;
+  c.fillStyle = 'rgba(0,0,0,.15)'; rr(sx + 1, sy + 2, 16, 30, 4); c.fill();
+  c.fillStyle = '#2fb36b'; rr(sx, sy, 16, 30, 4); c.fill();
+  text('出', sx + 8, sy + 8.5, `800 10px ${FONT}`, '#fff');
+  text('口', sx + 8, sy + 21.5, `800 10px ${FONT}`, '#fff');
+}
 function draw() {
   c.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
   c.clearRect(0, 0, W, H);
@@ -820,6 +708,7 @@ function draw() {
   T.bg();
   T.corridor();
   T.store();
+  drawExit();
   // 店内の人
   const ins = g.inside.slice().sort((a, b) => a.y - b.y);
   for (const p of ins) T.person(p, p.x, p.y, p.walking, clock);
@@ -880,8 +769,7 @@ function setOption(key, v) {
   if (settings[key] === v) return;
   settings[key] = v;
   store.set(SETTINGS_KEY, JSON.stringify(settings));
-  if (key === 'theme') applyTheme(v);
-  else if (state === 'title') { newGame(true); resetVisuals(); }   // 難易度・時間はデモを作り直して反映
+  if (state === 'title') { newGame(true); resetVisuals(); }   // 難易度・時間はデモを作り直して反映
   refreshMenu();
 }
 function applyTheme(key) {
@@ -912,6 +800,8 @@ function endGame() {
   $('rMiss').textContent = `${g.miss}回`;
   $('rCombo').textContent = g.maxCombo;
   $('rNew').classList.toggle('hidden', !isNew);
+  lastResult = { mode: key, score: g.score, ok: g.ok, people: g.people, maxCombo: g.maxCombo };
+  showRankBox();
   setTimeout(() => { if (state === 'over') $('result').classList.remove('hidden'); }, 700);
 }
 function toTitle() {
@@ -933,6 +823,108 @@ function resumeGame() {
   if (state !== 'pause') return;
   $('pause').classList.add('hidden');
   setState(g.pausedFrom);
+}
+
+// ============================================================
+//  オンラインランキング（ranking.js / ranking_config.js）
+// ============================================================
+const NAME_KEY = 'gyoretsu-name';
+const RANK_NOT_SET = 'ランキングを読み込めませんでした';
+const LOCAL_NOTE = 'この端末だけのランキングです';
+let lastResult = null;        // 直前のゲーム結果（ランキング登録用）
+let submitted = false;
+const rankSel = { diff: settings.diff, time: settings.time };
+
+// ranking.js は game.js より先に読み込まれる。念のため、まだ無ければ少し待つ
+function getRanking() {
+  if (window.Ranking) return Promise.resolve(window.Ranking);
+  return new Promise(res => {
+    const t = setTimeout(() => res(window.Ranking || null), 4000);
+    window.addEventListener('ranking-ready', () => { clearTimeout(t); res(window.Ranking); }, { once: true });
+  });
+}
+function renderRankList(ol, rows, meId) {
+  ol.textContent = '';
+  rows.forEach((r, i) => {
+    const li = document.createElement('li');
+    if (meId && r.id === meId) li.classList.add('me');
+    const no = document.createElement('span'); no.className = 'no'; no.textContent = i + 1;
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.name;
+    const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = r.score;
+    li.append(no, nm, sc);
+    ol.append(li);
+  });
+}
+async function loadRankList(ol, msgEl, mode, meId) {
+  const req = String((Number(ol.dataset.req) || 0) + 1);
+  ol.dataset.req = req;        // 古い読み込み結果で上書きしないための番号
+  msgEl.textContent = '読み込み中…';
+  const R = await getRanking();
+  if (ol.dataset.req !== req) return;
+  if (!R || !R.enabled) { ol.textContent = ''; msgEl.textContent = RANK_NOT_SET; return; }
+  try {
+    const rows = await R.top(mode);
+    if (ol.dataset.req !== req) return;
+    renderRankList(ol, rows, meId);
+    msgEl.textContent = !rows.length ? 'まだ記録がありません。一番乗りを目指そう！' : R.online ? '' : LOCAL_NOTE;
+  } catch (err) {
+    console.warn('ranking load failed', err);
+    if (ol.dataset.req === req) msgEl.textContent = 'ランキングを読み込めませんでした';
+  }
+}
+function refreshRankTabs() {
+  for (const opt of document.querySelectorAll('.opt-r')) {
+    const key = opt.dataset.rkey;
+    for (const b of opt.querySelectorAll('button')) b.classList.toggle('on', b.dataset.v === rankSel[key]);
+  }
+}
+function loadRankView() {
+  refreshRankTabs();
+  loadRankList($('rankList'), $('rankState'), `${rankSel.diff}-${rankSel.time}`);
+}
+function openRanking() {
+  rankSel.diff = settings.diff;
+  rankSel.time = settings.time;
+  $('ranking').classList.remove('hidden');
+  loadRankView();
+}
+async function showRankBox() {
+  submitted = false;
+  const box = $('rankBox');
+  box.classList.add('hidden');
+  const R = await getRanking();
+  if (!R || !R.enabled || !lastResult) return;
+  box.classList.remove('hidden');
+  const canSend = lastResult.score > 0;     // 0点は登録できない
+  $('rankForm').classList.remove('hidden');
+  $('rankName').value = canSend ? store.get(NAME_KEY, '') : '';
+  $('rankName').placeholder = canSend ? 'なまえ（12文字まで）' : '0点は登録できません';
+  $('rankName').disabled = !canSend;
+  $('rankSend').disabled = !canSend;
+  loadRankList($('rankListResult'), $('rankMsg'), lastResult.mode);
+}
+async function submitRank(e) {
+  e.preventDefault();
+  if (submitted || !lastResult) return;
+  const R = await getRanking();
+  if (!R || !R.enabled) return;
+  const msg = $('rankMsg');
+  const name = R.cleanName($('rankName').value);
+  if (!name) { msg.textContent = 'なまえを入れてください'; $('rankName').focus(); return; }
+  store.set(NAME_KEY, name);
+  $('rankSend').disabled = true;
+  msg.textContent = '登録中…';
+  try {
+    const res = await R.submit(lastResult.mode, { ...lastResult, name });
+    submitted = true;
+    $('rankForm').classList.add('hidden');
+    await loadRankList($('rankListResult'), msg, lastResult.mode, res.id);
+    msg.textContent = (res.rank ? `${res.rank}位で登録しました！` : '登録しました！') + (R.online ? '' : `（${LOCAL_NOTE}）`);
+  } catch (err) {
+    console.warn('ranking submit failed', err);
+    $('rankSend').disabled = false;
+    msg.textContent = '登録できませんでした。通信状態を確認して、もう一度押してください';
+  }
 }
 
 // 入力
@@ -959,11 +951,14 @@ $('resumeBtn').addEventListener('click', resumeGame);
 $('quitBtn').addEventListener('click', toTitle);
 $('helpBtn').addEventListener('click', () => $('help').classList.remove('hidden'));
 $('helpClose').addEventListener('click', () => $('help').classList.add('hidden'));
+$('rankBtn').addEventListener('click', openRanking);
+$('rankClose').addEventListener('click', () => $('ranking').classList.add('hidden'));
+$('rankForm').addEventListener('submit', submitRank);
+for (const opt of document.querySelectorAll('.opt-r')) {
+  for (const b of opt.querySelectorAll('button')) b.addEventListener('click', () => { rankSel[opt.dataset.rkey] = b.dataset.v; loadRankView(); });
+}
 
-// テーマは URL (?theme=neon) でも指定可能
-const qTheme = new URLSearchParams(location.search).get('theme');
-if (THEMES[qTheme]) settings.theme = qTheme;
-applyTheme(settings.theme);
+applyTheme('pop');
 toTitle();
 
 // テスト用フック（?debug のときだけ）

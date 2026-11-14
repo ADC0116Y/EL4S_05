@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// オンラインランキング用の Firestore セキュリティルール
+// Firebase コンソールの Firestore Database →「ルール」にこの内容を貼り付けて「公開」してください。
+// ・だれでも読める
+// ・新しい記録の追加だけできる（書き換え・削除はできない）
+// ・名前は1〜12文字、数値は整数で範囲内、日時はサーバーの時刻だけ
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function validMode(mode) {
+      return mode in ['easy-30', 'easy-60', 'easy-endless',
+                      'normal-30', 'normal-60', 'normal-endless',
+                      'hard-30', 'hard-60', 'hard-endless'];
+    }
+
+    function validEntry(d) {
+      return d.keys().hasOnly(['name', 'score', 'ok', 'people', 'maxCombo', 'createdAt'])
+        && d.keys().hasAll(['name', 'score', 'ok', 'people', 'maxCombo', 'createdAt'])
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 12
+        && d.score is int && d.score > 0 && d.score <= 10000000
+        && d.ok is int && d.ok >= 0 && d.ok <= 10000
+        && d.people is int && d.people >= 0 && d.people <= 1000000
+        && d.maxCombo is int && d.maxCombo >= 0 && d.maxCombo <= 10000
+        && d.createdAt == request.time;
+    }
+
+    match /rankings/{mode}/scores/{id} {
+      allow read: if validMode(mode);
+      allow create: if validMode(mode) && validEntry(request.resource.data);
+      allow update, delete: if false;
+    }
+  }
+}
