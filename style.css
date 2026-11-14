@@ -122,6 +122,11 @@ html, body {
   background: var(--panel);
   box-shadow: 0 .25em 0 rgba(0,0,0,.18), 0 .5em 1.2em rgba(0,0,0,.25);
 }
+.logo h1 { font-size: 1.25em; letter-spacing: .02em; white-space: nowrap; }
+.logo h1 small {
+  display: block; margin-top: .15em;
+  font-size: .5em; letter-spacing: .12em;
+}
 .logo p {
   display: block; width: fit-content; margin: .45em auto 0;
   font-size: .8em; font-weight: 800;

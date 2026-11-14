@@ -1,4 +1,4 @@
-// ===== 行列作成：自分で動かすサーバー =====
+// ===== 行列のできるカフェ 〜案内人編〜：自分で動かすサーバー =====
 // ゲームのファイル配信とランキングAPIを、Node.js の標準機能だけで動かします（npm install 不要）。
 //
 //   起動:  node server.js        （または start.bat をダブルクリック）
@@ -220,7 +220,7 @@ server.listen(PORT, () => {
   const os = require('os');
   const lan = Object.values(os.networkInterfaces()).flat()
     .filter(i => i && i.family === 'IPv4' && !i.internal).map(i => `http://${i.address}:${PORT}`);
-  console.log('行列作成サーバーを起動しました（止めるときは Ctrl + C）');
+  console.log('「行列のできるカフェ 〜案内人編〜」のサーバーを起動しました（止めるときは Ctrl + C）');
   console.log(`  このPCから:        http://localhost:${PORT}`);
   for (const u of lan) console.log(`  同じネットワークから: ${u}`);
 });
