@@ -103,7 +103,7 @@
     const def = {
       target: {min: 5, max: 18, bonusPerStreak: 1, bonusMax: 6},
       speed:  {start: 45, startPerStreak: 4, accel: 32, accelPerStreak: 7, personMin: 0.75, personMax: 1.35, response: 6},
-      queue:  {gap: 15, extraGap: 30, firstDistance: 14, sideJitter: 6},
+      queue:  {count: 80, gap: 15, extraGap: 30, firstDistance: 14, sideJitter: 6},
       gate:   {stopDistance: 14, animSpeed: 18, judgeDelayMs: 900},
       store:  {walkSpeed: 220, approachSpeed: 120, doorSensor: 70},
       texts: {
@@ -132,6 +132,7 @@
     if (out.target.max < out.target.min) out.target.max = out.target.min;
     if (out.speed.personMax < out.speed.personMin) out.speed.personMax = out.speed.personMin;
     out.queue.gap = Math.max(1, out.queue.gap);
+    out.queue.count = Math.max(0, Math.floor(out.queue.count));
     return out;
   })();
   const fmt = (s, v) => String(s).replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
@@ -206,7 +207,6 @@
     const T = GC.target, S = GC.speed, Q = GC.queue;
     target = Math.round(T.min) + Math.floor(Math.random() * (Math.round(T.max) - Math.round(T.min) + 1))
            + Math.round(Math.min(streak * T.bonusPerStreak, T.bonusMax));
-    bubbleText = [fmt(GC.texts.requestTop, {target}), fmt(GC.texts.requestBottom, {target})];
     bubbleColor = '#2b2622';
     entered = 0; seated = 0; openTime = 0; gateAnim = 0;
     accel = S.accel + streak * S.accelPerStreak;   // 開いている間の加速（連続成功で上がる）
@@ -214,8 +214,10 @@
     spots = storeSpots();
     people = [];
     // d = 店のドアまでの距離（行列ゲートは d = GATE_D）。間隔をバラつかせて「固まって来る」瞬間を作る
+    // 並ぶ人数：queue.count 人（0 なら行列エリアがいっぱいになるまで）。
+    // 行列エリアに入りきらない人は、画面の外（行列の最後尾の先）で待っていて、列が進むと見えてくる。
     let d = GATE_D + Q.firstDistance;
-    while (d < PATH.total) {
+    while (Q.count > 0 ? people.length < Q.count : d < PATH.total) {
       people.push({
         d, v: 0, x: 0, y: 0,
         side: (Math.random() * 2 - 1) * Q.sideJitter,
@@ -227,6 +229,9 @@
       d += MIN_GAP + Math.random() * Math.random() * Math.max(0, Q.extraGap);
     }
     for (const p of people) placeOnPath(p);
+    // 並んでいる人数より多くは指定しない
+    target = Math.max(0, Math.min(target, people.length));
+    bubbleText = [fmt(GC.texts.requestTop, {target}), fmt(GC.texts.requestBottom, {target})];
     state = 'ready';
     btn.textContent = 'ゲートを開ける';
     btn.className = '';
@@ -493,7 +498,10 @@
     }
 
     for (const p of people) if (p.inside) drawPerson(p);
-    for (let i = people.length - 1; i >= 0; i--) if (!people[i].inside) drawPerson(people[i]);
+    for (let i = people.length - 1; i >= 0; i--) {
+      const p = people[i];
+      if (!p.inside && p.d <= PATH.total) drawPerson(p);   // 最後尾より後ろの人は画面の外なので描かない
+    }
 
     drawAutoDoor();
     drawQueueGate();
