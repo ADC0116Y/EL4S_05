@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ぴったり入店ゲート</title>
+<style>
+  :root{
+    --bg:#f6f3ee; --ink:#2b2622; --muted:#7a7068; --line:#e2dcd3;
+    --accent:#e0533d; --ok:#2f9e6b; --warn:#d98a1c; --card:#fffdf9;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic",system-ui,sans-serif;}
+  .wrap{max-width:860px;margin:0 auto;padding:18px 14px 28px;}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  h1{font-size:20px;margin:0;letter-spacing:.02em}
+  .stats{display:flex;gap:14px;font-size:13px;color:var(--muted)}
+  .stats b{color:var(--ink);font-size:15px}
+  .order{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;padding:10px 14px;margin-bottom:10px}
+  .order .label{font-size:13px;color:var(--muted)}
+  .order .num{font-size:34px;font-weight:800;color:var(--accent);line-height:1}
+  .order .unit{font-size:15px;font-weight:700}
+  .order .live{margin-left:auto;font-size:13px;color:var(--muted)}
+  .order .live b{font-size:20px;color:var(--ink)}
+  canvas{display:block;width:100%;height:auto;background:#fff;border:1px solid var(--line);border-radius:12px;touch-action:manipulation;cursor:pointer}
+  .controls{display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap}
+  #btn{flex:1;min-width:220px;font-size:22px;font-weight:800;padding:16px;border:none;border-radius:12px;
+    background:var(--ink);color:#fff;cursor:pointer;transition:transform .05s, background .15s;font-family:inherit}
+  #btn:active{transform:scale(.98)}
+  #btn.open{background:var(--accent)}
+  #btn.retry{background:var(--ok)}
+  #btn:disabled{opacity:.5;cursor:default}
+  .opt{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;user-select:none}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px}
+  .result{min-height:58px;margin-top:12px;border-radius:12px;padding:12px 14px;font-size:15px;display:none}
+  .result.show{display:block}
+  .result.ok{background:#e6f5ee;color:#1f6f4b}
+  .result.under{background:#fdf2e1;color:#8a560f}
+  .result.over{background:#fde8e4;color:#9b2d1d}
+  .result .big{font-size:22px;font-weight:800;display:block;margin-bottom:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ぴったり入店ゲート</h1>
+    <div class="stats">
+      <span>連続成功 <b id="streak">0</b></span>
+      <span>最高記録 <b id="best">0</b></span>
+    </div>
+  </header>
+
+  <div class="order">
+    <span class="label">店長「</span>
+    <span class="num" id="target">-</span><span class="unit">名様ご案内！」</span>
+    <span class="live" id="liveWrap" style="display:none">入店 <b id="live">0</b> 人</span>
+  </div>
+
+  <canvas id="cv" width="800" height="340"></canvas>
+
+  <div class="controls">
+    <button id="btn">ゲートを開ける</button>
+    <label class="opt"><input type="checkbox" id="showCount"> 入店人数を表示（かんたん）</label>
+  </div>
+  <div class="hint">スペースキー／画面タップでも操作できます。ゲートは1回開けて1回閉めたら判定。開いている時間が長いほど人の勢いが増します。</div>
+
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const W = 800, H = 340;
+  const GATE_X = 470;
+  const STORE = {x: GATE_X + 24, y: 30, w: W - GATE_X - 44, h: H - 60};
+  const R = 9;
+  const MIN_GAP = 15;
+
+  const btn = document.getElementById('btn');
+  const targetEl = document.getElementById('target');
+  const resultEl = document.getElementById('result');
+  const streakEl = document.getElementById('streak');
+  const bestEl = document.getElementById('best');
+  const liveEl = document.getElementById('live');
+  const liveWrap = document.getElementById('liveWrap');
+  const showCount = document.getElementById('showCount');
+
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('gateBest') || '0', 10) || 0; } catch(e) {}
+  bestEl.textContent = best;
+  let streak = 0;
+
+  const COLORS = ['#4f7cac','#e0533d','#2f9e6b','#d98a1c','#8a5fb3','#c2557d','#3a9fb0','#6b7a3a','#b0703a','#556070'];
+
+  let people, state, target, entered, openTime, gateAnim, judgeTimer, accel, vBase;
+
+  // Hidden "slots" inside the store so people don't overlap
+  function storeSpots(){
+    const spots = [];
+    const cols = 11, rows = 10;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      spots.push({
+        x: STORE.x + 22 + c * ((STORE.w - 44) / (cols - 1)) + (Math.random()*6-3),
+        y: STORE.y + 22 + r * ((STORE.h - 44) / (rows - 1)) + (Math.random()*6-3)
+      });
+    }
+    for (let i = spots.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [spots[i],spots[j]]=[spots[j],spots[i]]; }
+    return spots;
+  }
+  let spots;
+
+  function newRound(){
+    clearTimeout(judgeTimer);
+    target = 5 + Math.floor(Math.random() * 14) + Math.min(streak, 6); // 5〜24
+    targetEl.textContent = target;
+    entered = 0; openTime = 0; gateAnim = 0;
+    accel = 32 + streak * 7;   // 開いている間の加速（連続成功で上がる）
+    vBase = 45 + streak * 4;
+    spots = storeSpots();
+    people = [];
+    // Crowd packed behind the gate, uneven spacing creates bursts
+    let x = GATE_X - 16;
+    const midY = H / 2;
+    for (let i = 0; i < 80; i++) {
+      const gap = MIN_GAP + Math.random() * Math.random() * 30;
+      people.push({
+        x, y: midY + (Math.random() * 2 - 1) * 46,
+        baseY: 0,
+        vx: 0,
+        mul: 0.75 + Math.random() * 0.6,
+        color: COLORS[Math.floor(Math.random()*COLORS.length)],
+        inside: false, spot: null, bob: Math.random() * 6.28
+      });
+      people[i].baseY = people[i].y;
+      x -= gap;
+    }
+    state = 'ready';
+    btn.textContent = 'ゲートを開ける';
+    btn.className = '';
+    btn.disabled = false;
+    resultEl.className = 'result';
+    resultEl.innerHTML = '';
+    updateLive();
+  }
+
+  function updateLive(){
+    liveWrap.style.display = showCount.checked ? '' : 'none';
+    liveEl.textContent = entered;
+  }
+  showCount.addEventListener('change', updateLive);
+
+  function press(){
+    if (state === 'ready') {
+      state = 'open';
+      btn.textContent = 'ゲートを閉める！';
+      btn.className = 'open';
+    } else if (state === 'open') {
+      state = 'closed';
+      btn.textContent = '判定中…';
+      btn.className = '';
+      btn.disabled = true;
+      judgeTimer = setTimeout(judge, 900);
+    } else if (state === 'result') {
+      newRound();
+    }
+  }
+
+  function judge(){
+    state = 'result';
+    const diff = entered - target;
+    let cls, big, sub;
+    if (diff === 0) {
+      streak++;
+      if (streak > best) { best = streak; try { localStorage.setItem('gateBest', String(best)); } catch(e) {} }
+      cls = 'ok'; big = 'ぴったり！ 大成功';
+      sub = `${target}名様ちょうどご案内。店長もにっこり。次はもっと勢いが強くなります。`;
+    } else if (diff < 0) {
+      streak = 0;
+      cls = 'under'; big = `${-diff}人足りない…`;
+      sub = `入店 ${entered}人 ／ 指定 ${target}人。慎重すぎて席が空いてしまいました。`;
+    } else {
+      streak = 0;
+      cls = 'over'; big = `${diff}人オーバー！`;
+      sub = `入店 ${entered}人 ／ 指定 ${target}人。店内がパンク、店長激怒。`;
+    }
+    streakEl.textContent = streak;
+    bestEl.textContent = best;
+    resultEl.className = 'result show ' + cls;
+    resultEl.innerHTML = `<span class="big">${big}</span>${sub}`;
+    btn.textContent = 'もう一回';
+    btn.className = 'retry';
+    btn.disabled = false;
+  }
+
+  btn.addEventListener('click', press);
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); if (!btn.disabled) press(); });
+  window.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); if (!btn.disabled) press(); }
+  });
+
+  function update(dt){
+    const gateOpen = state === 'open';
+    gateAnim += ((gateOpen ? 1 : 0) - gateAnim) * Math.min(1, dt * 18);
+    if (gateOpen) openTime += dt;
+
+    const surge = gateOpen ? vBase + accel * openTime : 0;
+    // Queue: front to back
+    let limit = gateOpen ? Infinity : GATE_X - 14;
+    for (const p of people) {
+      if (p.inside) continue;
+      const want = gateOpen ? surge * p.mul : 0;
+      p.vx += (want - p.vx) * Math.min(1, dt * 6);
+      let nx = p.x + p.vx * dt;
+      if (nx > limit) { nx = limit; p.vx = Math.min(p.vx, 0); }
+      p.x = nx;
+      if (p.x > GATE_X) {
+        // crossed the gate line → entered
+        p.inside = true;
+        p.spot = spots[entered % spots.length];
+        entered++;
+        updateLive();
+      } else {
+        limit = p.x - MIN_GAP;
+      }
+      // funnel toward the gate opening as they approach
+      const dist = GATE_X - p.x;
+      const squeeze = dist < 120 ? Math.max(0.15, dist / 120) : 1;
+      p.y += ((H/2 + (p.baseY - H/2) * squeeze) - p.y) * Math.min(1, dt * 8);
+      if (p.vx > 5) p.bob += dt * (6 + p.vx / 25);
+    }
+    // People inside walk to their spots
+    for (const p of people) {
+      if (!p.inside) continue;
+      const dx = p.spot.x - p.x, dy = p.spot.y - p.y;
+      const d = Math.hypot(dx, dy);
+      const sp = 220;
+      if (d > 1) { const m = Math.min(d, sp * dt); p.x += dx / d * m; p.y += dy / d * m; p.bob += dt * 10; }
+    }
+  }
+
+  function drawPerson(p){
+    const bobY = Math.sin(p.bob) * 1.6;
+    ctx.fillStyle = 'rgba(0,0,0,.08)';
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + R + 1, R * 0.9, 3, 0, 0, 6.28); ctx.fill();
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y + bobY, R, 0, 6.28); ctx.fill();
+    ctx.fillStyle = '#f3d9c0';
+    ctx.beginPath(); ctx.arc(p.x + 2, p.y - 3 + bobY, 4.2, 0, 6.28); ctx.fill();
+  }
+
+  function draw(){
+    ctx.clearRect(0, 0, W, H);
+    // street
+    ctx.fillStyle = '#faf8f4'; ctx.fillRect(0, 0, GATE_X, H);
+    ctx.strokeStyle = '#ece6dc'; ctx.lineWidth = 1;
+    for (let x = 0; x < GATE_X; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    // store floor
+    ctx.fillStyle = '#f4ece0'; ctx.fillRect(GATE_X, 0, W - GATE_X, H);
+    ctx.fillStyle = '#e9dccb';
+    for (let x = GATE_X; x < W; x += 28) for (let y = 0; y < H; y += 28)
+      if (((x - GATE_X) / 28 + y / 28) % 2 === 0) ctx.fillRect(x, y, 28, 28);
+    // store label
+    ctx.fillStyle = '#b9a58c'; ctx.font = 'bold 14px "Hiragino Sans","Noto Sans JP",sans-serif';
+    ctx.textAlign = 'right'; ctx.fillText('店内', W - 14, 22);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#c9bfb2'; ctx.fillText('← 行列', 12, 22);
+
+    // walls with gate opening
+    const gapHalf = 34;
+    ctx.fillStyle = '#5a4f46';
+    ctx.fillRect(GATE_X - 4, 0, 8, H/2 - gapHalf);
+    ctx.fillRect(GATE_X - 4, H/2 + gapHalf, 8, H/2 - gapHalf);
+
+    for (const p of people) if (p.inside) drawPerson(p);
+    for (let i = people.length - 1; i >= 0; i--) if (!people[i].inside && people[i].x > -20) drawPerson(people[i]);
+
+    // gate bar (slides up into the wall when open)
+    const barLen = gapHalf * 2 * (1 - gateAnim);
+    ctx.fillStyle = gateAnim > 0.5 ? '#2f9e6b' : '#e0533d';
+    ctx.fillRect(GATE_X - 3, H/2 - gapHalf, 6, barLen);
+    // posts
+    ctx.fillStyle = '#2b2622';
+    ctx.beginPath(); ctx.arc(GATE_X, H/2 - gapHalf, 6, 0, 6.28); ctx.fill();
+    ctx.beginPath(); ctx.arc(GATE_X, H/2 + gapHalf, 6, 0, 6.28); ctx.fill();
+    // lamp
+    ctx.fillStyle = state === 'open' ? '#2f9e6b' : '#e0533d';
+    ctx.beginPath(); ctx.arc(GATE_X, 18, 7, 0, 6.28); ctx.fill();
+  }
+
+  function fit(){
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  let last = performance.now();
+  function loop(now){
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    update(dt); draw();
+    requestAnimationFrame(loop);
+  }
+  newRound();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
