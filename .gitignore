@@ -1,0 +1,22 @@
+# ===== Git で管理しないファイル =====
+
+# Visual Studio が自動で作る作業用ファイル（インデックス・ウィンドウ配置など）
+.vs/
+
+# Claude Code のローカル設定（プレビュー用サーバーの設定など、このPC専用）
+.claude/
+
+# エディタの設定・一時ファイル
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS が自動で作るファイル
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ログ・一時ファイル
+*.log
+*.tmp
