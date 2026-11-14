@@ -5,12 +5,23 @@
 //  基本設定
 // ============================================================
 const W = 420, HUD = 48, SH = 760, H = HUD + SH;   // 論理サイズ（HUD + シーン）
-const GAME_TIME = 60;
-const RATE_MIN = 2, RATE_MAX = 10, RATE_RAMP = 3;   // 送り出し速度: 2人/s → 10人/s（3秒で最大）
+// 難易度: 要求人数の範囲 / 送り出し速度（rateMin → rateMax 人/s を ramp 秒で） / 得点倍率 / リールの回る速さ
+const DIFFS = {
+  easy:   { label: 'やさしい',   nMin: 2, nMax: 12, rateMin: 2, rateMax: 6,  ramp: 4, mult: 0.8, reel: 16 },
+  normal: { label: 'ふつう',     nMin: 3, nMax: 30, rateMin: 2, rateMax: 10, ramp: 3, mult: 1.0, reel: 16 },
+  hard:   { label: 'むずかしい', nMin: 5, nMax: 40, rateMin: 3, rateMax: 14, ramp: 2, mult: 1.5, reel: 7 },
+};
+// 時間: time=Infinity はエンドレス（ライフ制）。rampTime 秒かけて要求人数が最大まで増える
+const TIMES = {
+  '30':    { label: '30秒',       time: 30,       rampTime: 30 },
+  '60':    { label: '60秒',       time: 60,       rampTime: 60 },
+  endless: { label: 'エンドレス', time: Infinity, rampTime: 90 },
+};
+const LIVES = 3;
 const WALK = 230;                                    // 案内中の歩く速さ px/s
 const QUEUE_SPEED = 420;                             // 行列が詰める速さ px/s
 const FONT = '"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Yu Gothic UI","Meiryo",sans-serif';
-const HI_KEY = 'gyoretsu-hiscore', THEME_KEY = 'gyoretsu-theme';
+const HI_KEY = 'gyoretsu-hiscores', SETTINGS_KEY = 'gyoretsu-settings';
 
 const cv = document.getElementById('cv');
 const c = cv.getContext('2d');
@@ -393,12 +404,19 @@ const THEMES = {
 // ============================================================
 //  ゲーム状態
 // ============================================================
-let themeKey = store.get(THEME_KEY, 'pop');
-if (!THEMES[themeKey]) themeKey = 'pop';
-let T = THEMES[themeKey];
-let state = 'title';          // title | count | play | over
+// 選択中のモード（前回の選択を記憶）
+const settings = { diff: 'normal', time: '60', theme: 'pop' };
+try { Object.assign(settings, JSON.parse(store.get(SETTINGS_KEY, '{}'))); } catch { /* ignore */ }
+if (!DIFFS[settings.diff]) settings.diff = 'normal';
+if (!TIMES[settings.time]) settings.time = '60';
+if (!THEMES[settings.theme]) settings.theme = 'pop';
+let T = THEMES[settings.theme];
+let state = 'title';          // title（デモ） | count | play | pause | over
 let g = null;
-let hiScore = parseInt(store.get(HI_KEY, '0'), 10) || 0;
+let hiScores = {};
+try { hiScores = JSON.parse(store.get(HI_KEY, '{}')) || {}; } catch { hiScores = {}; }
+const modeKey = () => `${settings.diff}-${settings.time}`;
+const getHi = () => hiScores[modeKey()] || 0;
 let clock = 0;                // 経過時間（アニメ用）
 const doorK = [0, 0, 0, 0];
 const reel = [0, 0, 0];       // リール表示（各桁の累積値）
@@ -406,9 +424,12 @@ const reel = [0, 0, 0];       // リール表示（各桁の累積値）
 function newPerson() {
   return { c: randi(0, 99), h: randi(0, 99), seed: rand(0, 10) };
 }
-function newGame() {
+function newGame(demo) {
+  const D = DIFFS[settings.diff], TM = TIMES[settings.time];
   g = {
-    time: GAME_TIME, score: 0, combo: 0, maxCombo: 0, ok: 0, people: 0, miss: 0,
+    demo: !!demo, D, TM, endless: TM.time === Infinity,
+    time: TM.time, elapsed: 0, lives: LIVES,
+    score: 0, combo: 0, maxCombo: 0, ok: 0, people: 0, miss: 0,
     req: null, nextReq: 0.9, lastDoor: -1,
     open: false, gateK: 0, openT: 0, acc: 0, pAnim: 0,
     queue: [], walkers: [], floats: [], countdown: 3.4,
@@ -418,14 +439,21 @@ function newGame() {
 }
 
 function newRequest() {
-  const elapsed = GAME_TIME - g.time;
-  const k = clamp(elapsed / GAME_TIME, 0, 1);
-  const lo = 3 + Math.floor(k * 4);
-  const hi = Math.round(8 + 22 * k);
+  const D = g.D;
+  const k = clamp(g.elapsed / g.TM.rampTime, 0, 1);
+  const start = Math.min(D.nMin + 5, D.nMax);
+  const lo = D.nMin + Math.floor(k * 4);
+  const hi = Math.round(start + (D.nMax - start) * k);
   let door;
   do { door = randi(0, 3); } while (door === g.lastDoor);
   g.lastDoor = door;
-  g.req = { door, n: randi(lo, hi), sent: 0, arrived: 0, locked: false, t: 0 };
+  const n = randi(lo, hi);
+  g.req = { door, n, sent: 0, arrived: 0, locked: false, t: 0 };
+  if (g.demo) {
+    // デモ: たまにわざと少しずらして、ミスの様子も見せる
+    g.req.demoWait = rand(0.3, 0.9);
+    g.req.demoTarget = Math.random() < 0.2 ? Math.max(1, n + (Math.random() < 0.5 ? -1 : 1) * randi(1, 2)) : n;
+  }
 }
 
 function releaseOne() {
@@ -455,16 +483,21 @@ function judge() {
     g.combo++;
     g.maxCombo = Math.max(g.maxCombo, g.combo);
     const mult = 1 + 0.2 * Math.min(g.combo - 1, 10);
-    const pts = Math.round((r.n * 10 + 100) * mult);
+    const pts = Math.round((r.n * 10 + 100) * mult * g.D.mult);
     g.score += pts; g.ok++; g.people += r.n;
     addFloat('ぴったり！', fx, fy, T.ok, 20);
     addFloat(`+${pts}` + (g.combo >= 2 ? `  ${g.combo}コンボ` : ''), fx, fy + 24, T.ok, 14);
   } else {
     g.combo = 0; g.miss++;
     addFloat(diff > 0 ? `${diff}人多い…` : `${-diff}人足りない…`, fx, fy, T.ng, 18);
+    if (g.endless) { g.lives--; g.lifeFlash = 1; }
   }
   g.req = null;
   g.nextReq = rand(0.5, 2);
+  if (g.endless && g.lives <= 0) {
+    if (g.demo) g.restartIn = 2;
+    else endGame();
+  }
 }
 function checkJudge() {
   const r = g.req;
@@ -476,7 +509,11 @@ function addFloat(str, x, y, color, size) {
 
 function toggleGate() {
   if (state !== 'play') return;
-  g.open = !g.open;
+  setGate(!g.open);
+}
+function setGate(open) {
+  if (g.open === open) return;
+  g.open = open;
   g.pAnim = 1;
   if (g.open) {
     g.openT = 0; g.acc = 1;           // 開けた瞬間に1人目が出る
@@ -498,22 +535,45 @@ function updateBtn() {
 // ============================================================
 function update(dt) {
   clock += dt;
+  if (state === 'pause') return;
   if (state === 'count') {
     g.countdown -= dt;
     if (g.countdown <= 0) { state = 'play'; updateBtn(); }
   }
-  if (state === 'play') {
-    g.time -= dt;
-    if (g.time <= 0) { g.time = 0; endGame(); }
+  // デモが終わったら作り直してループ
+  if (state === 'title' && g.restartIn !== undefined) {
+    g.restartIn -= dt;
+    if (g.restartIn <= 0) { newGame(true); resetVisuals(); }
   }
-  if (state === 'play') {
+  const running = (state === 'play' || state === 'title') && g.restartIn === undefined;
+  if (running) {
+    g.elapsed += dt;
+    if (!g.endless) {
+      g.time -= dt;
+      if (g.time <= 0) {
+        g.time = 0;
+        if (g.demo) g.restartIn = 1.5; else endGame();
+      }
+    }
+  }
+  g.lifeFlash = Math.max(0, (g.lifeFlash || 0) - dt * 2);
+  if (running && g.restartIn === undefined) {
     if (!g.req) { g.nextReq -= dt; if (g.nextReq <= 0) newRequest(); }
     if (g.req) g.req.t += dt;
+    // デモの自動操作
+    if (g.demo) {
+      const r = g.req;
+      if (r && !r.locked) {
+        if (!g.open && r.sent === 0 && r.t > r.demoWait) setGate(true);
+        if (g.open && r.sent >= r.demoTarget) setGate(false);
+      } else if (g.open) setGate(false);
+    }
     // 送り出し（開けている間に加速）
     if (g.open && g.req && !g.req.locked) {
       g.openT += dt;
-      const k = Math.min(1, g.openT / RATE_RAMP);
-      const rate = RATE_MIN + (RATE_MAX - RATE_MIN) * k * k;
+      const D = g.D;
+      const k = Math.min(1, g.openT / D.ramp);
+      const rate = D.rateMin + (D.rateMax - D.rateMin) * k * k;
       g.acc += rate * dt;
       while (g.acc >= 1) { g.acc -= 1; releaseOne(); }
     }
@@ -555,7 +615,7 @@ function update(dt) {
   const shown = g.req ? g.req.sent : 0;
   for (let p = 0; p < reel.length; p++) {
     const tgt = Math.floor(shown / 10 ** p);
-    reel[p] += (tgt - reel[p]) * Math.min(1, dt * 16);
+    reel[p] += (tgt - reel[p]) * Math.min(1, dt * g.D.reel);
     if (Math.abs(tgt - reel[p]) < 0.002) reel[p] = tgt;
   }
 
@@ -649,20 +709,41 @@ function drawHUD() {
   const hd = T.hud;
   c.fillStyle = hd.bg; c.fillRect(0, 0, W, HUD);
   if (hd.line) { c.fillStyle = hd.line; c.fillRect(0, HUD - 1, W, 1); }
-  const t = g ? Math.max(0, g.time) : GAME_TIME;
-  text('のこり', 14, 13, `500 10px ${FONT}`, hd.sub, 'left');
-  text(t.toFixed(1), 14, 31, `800 22px ${FONT}`, t <= 10 ? hd.accent : hd.text, 'left');
-  text('スコア', W / 2, 13, `500 10px ${FONT}`, hd.sub);
-  text(String(g ? g.score : 0), W / 2, 31, `800 22px ${FONT}`, hd.text);
-  if (g && g.combo >= 2) {
-    text('コンボ', W - 14, 13, `500 10px ${FONT}`, hd.sub, 'right');
-    text(`×${g.combo}`, W - 14, 31, `800 22px ${FONT}`, hd.accent, 'right');
+  if (g.endless) {
+    // エンドレス: ライフ表示
+    text('ライフ', 14, 13, `500 10px ${FONT}`, hd.sub, 'left');
+    for (let i = 0; i < LIVES; i++) {
+      const alive = i < g.lives;
+      const pop = !alive && i === g.lives && g.lifeFlash > 0 ? 1 + g.lifeFlash * 0.6 : 1;
+      heart(24 + i * 24, 31, 9 * pop, alive ? hd.accent : hd.sub, alive ? 1 : 0.3);
+    }
   } else {
-    text('ハイスコア', W - 14, 13, `500 10px ${FONT}`, hd.sub, 'right');
-    text(String(hiScore), W - 14, 31, `800 18px ${FONT}`, hd.text, 'right');
+    const t = Math.max(0, g.time);
+    text('のこり', 14, 13, `500 10px ${FONT}`, hd.sub, 'left');
+    text(t.toFixed(1), 14, 31, `800 22px ${FONT}`, t <= 10 ? hd.accent : hd.text, 'left');
+    c.fillStyle = hd.barBg; c.fillRect(0, HUD - 4, W, 4);
+    c.fillStyle = t <= 10 ? hd.accent : hd.bar; c.fillRect(0, HUD - 4, W * t / g.TM.time, 4);
   }
-  c.fillStyle = hd.barBg; c.fillRect(0, HUD - 4, W, 4);
-  c.fillStyle = t <= 10 ? hd.accent : hd.bar; c.fillRect(0, HUD - 4, W * t / GAME_TIME, 4);
+  text('スコア', W / 2, 13, `500 10px ${FONT}`, hd.sub);
+  text(String(g.score), W / 2, 31, `800 22px ${FONT}`, hd.text);
+  const rx = W - 52;   // 右端は一時停止ボタン
+  if (g.combo >= 2) {
+    text('コンボ', rx, 13, `500 10px ${FONT}`, hd.sub, 'right');
+    text(`×${g.combo}`, rx, 31, `800 22px ${FONT}`, hd.accent, 'right');
+  } else {
+    text('ハイスコア', rx, 13, `500 10px ${FONT}`, hd.sub, 'right');
+    text(String(getHi()), rx, 31, `800 18px ${FONT}`, hd.text, 'right');
+  }
+}
+function heart(x, y, r, color, alpha) {
+  c.save();
+  c.globalAlpha = alpha; c.fillStyle = color;
+  c.beginPath();
+  c.moveTo(x, y + r * 0.9);
+  c.bezierCurveTo(x - r * 1.6, y - r * 0.1, x - r * 0.8, y - r * 1.3, x, y - r * 0.45);
+  c.bezierCurveTo(x + r * 0.8, y - r * 1.3, x + r * 1.6, y - r * 0.1, x, y + r * 0.9);
+  c.fill();
+  c.restore();
 }
 
 function outlinedText(str, x, y, size, color, alpha = 1) {
@@ -718,44 +799,81 @@ function draw() {
 // ============================================================
 //  画面遷移
 // ============================================================
+function setState(s) {
+  state = s;
+  gameEl.classList.toggle('in-title', s === 'title' || s === 'over');
+  updateBtn();
+}
+function resetVisuals() {
+  for (let i = 0; i < 4; i++) doorK[i] = 0;
+  reel.fill(0);
+}
+function modeLabel() {
+  return `${DIFFS[settings.diff].label}・${TIMES[settings.time].label}`;
+}
+function refreshMenu() {
+  for (const opt of document.querySelectorAll('.opt')) {
+    const key = opt.dataset.key;
+    for (const b of opt.querySelectorAll('button')) b.classList.toggle('on', b.dataset.v === settings[key]);
+  }
+  $('hiTitle').textContent = getHi();
+}
+function setOption(key, v) {
+  if (settings[key] === v) return;
+  settings[key] = v;
+  store.set(SETTINGS_KEY, JSON.stringify(settings));
+  if (key === 'theme') applyTheme(v);
+  else if (state === 'title') { newGame(true); resetVisuals(); }   // 難易度・時間はデモを作り直して反映
+  refreshMenu();
+}
 function applyTheme(key) {
-  themeKey = key; T = THEMES[key];
+  T = THEMES[key];
   gameEl.dataset.theme = key;
   document.documentElement.style.background = T.page;
   document.body.style.background = T.page;
-  for (const b of document.querySelectorAll('.themes button')) b.classList.toggle('on', b.dataset.theme === key);
-  store.set(THEME_KEY, key);
 }
 function startGame() {
-  newGame();
-  for (let i = 0; i < 4; i++) doorK[i] = 0;
-  reel.fill(0);
-  state = 'count';
+  newGame(false);
+  resetVisuals();
   $('title').classList.add('hidden');
   $('result').classList.add('hidden');
-  updateBtn();
+  $('pause').classList.add('hidden');
+  setState('count');
 }
 function endGame() {
-  state = 'over';
   g.open = false;
-  updateBtn();
-  const isNew = g.score > hiScore;
-  if (isNew) { hiScore = g.score; store.set(HI_KEY, String(hiScore)); }
+  setState('over');
+  const key = modeKey();
+  const isNew = g.score > (hiScores[key] || 0);
+  if (isNew) { hiScores[key] = g.score; store.set(HI_KEY, JSON.stringify(hiScores)); }
+  $('rMode').textContent = modeLabel();
   $('rScore').textContent = g.score;
   $('rOk').textContent = `${g.ok}回`;
   $('rPeople').textContent = `${g.people}人`;
   $('rMiss').textContent = `${g.miss}回`;
   $('rCombo').textContent = g.maxCombo;
   $('rNew').classList.toggle('hidden', !isNew);
-  setTimeout(() => $('result').classList.remove('hidden'), 700);
+  setTimeout(() => { if (state === 'over') $('result').classList.remove('hidden'); }, 700);
 }
 function toTitle() {
-  state = 'title';
-  newGame();
-  $('hiTitle').textContent = hiScore;
+  newGame(true);
+  resetVisuals();
   $('result').classList.add('hidden');
+  $('pause').classList.add('hidden');
   $('title').classList.remove('hidden');
-  updateBtn();
+  setState('title');
+  refreshMenu();
+}
+function pauseGame() {
+  if (state !== 'play' && state !== 'count') return;
+  g.pausedFrom = state;
+  setState('pause');
+  $('pause').classList.remove('hidden');
+}
+function resumeGame() {
+  if (state !== 'pause') return;
+  $('pause').classList.add('hidden');
+  setState(g.pausedFrom);
 }
 
 // 入力
@@ -765,22 +883,33 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code === 'Enter') {
     if (e.repeat) return;
     if (state === 'play') { e.preventDefault(); toggleGate(); }
+  } else if (e.code === 'Escape' || e.code === 'KeyP') {
+    if (state === 'pause') resumeGame(); else pauseGame();
   }
 });
+document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
 document.addEventListener('contextmenu', e => e.preventDefault());
-for (const b of document.querySelectorAll('.themes button')) b.addEventListener('click', () => applyTheme(b.dataset.theme));
+for (const opt of document.querySelectorAll('.opt')) {
+  for (const b of opt.querySelectorAll('button')) b.addEventListener('click', () => setOption(opt.dataset.key, b.dataset.v));
+}
 $('startBtn').addEventListener('click', startGame);
 $('retryBtn').addEventListener('click', startGame);
 $('toTitleBtn').addEventListener('click', toTitle);
+$('pauseBtn').addEventListener('click', pauseGame);
+$('resumeBtn').addEventListener('click', resumeGame);
+$('quitBtn').addEventListener('click', toTitle);
+$('helpBtn').addEventListener('click', () => $('help').classList.remove('hidden'));
+$('helpClose').addEventListener('click', () => $('help').classList.add('hidden'));
 
 // テーマは URL (?theme=neon) でも指定可能
 const qTheme = new URLSearchParams(location.search).get('theme');
-applyTheme(THEMES[qTheme] ? qTheme : themeKey);
+if (THEMES[qTheme]) settings.theme = qTheme;
+applyTheme(settings.theme);
 toTitle();
 
 // テスト用フック（?debug のときだけ）
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__q = { update, draw, toggleGate, startGame, get g() { return g; }, get state() { return state; } };
+  window.__q = { update, draw, toggleGate, startGame, toTitle, pauseGame, resumeGame, setOption, get g() { return g; }, get state() { return state; } };
 }
 
 let last = performance.now();

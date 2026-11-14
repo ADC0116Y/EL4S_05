@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="description" content="お店が欲しい人数ぴったりを、ゲートの開け閉めだけで案内する60秒ゲーム">
+<meta name="description" content="お店が欲しい人数ぴったりを、ゲートの開け閉めだけで案内するゲーム">
 <title>行列作成</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,38 +12,87 @@
 </head>
 <body>
 <div id="stage">
-  <div id="game" data-theme="pop">
+  <div id="game" data-theme="pop" class="in-title">
     <canvas id="cv"></canvas>
 
     <button id="gateBtn" type="button" aria-label="ゲートの開け閉め切り替え">
       <span class="l1">開ける</span>
       <span class="l2">開け閉め切り替え</span>
     </button>
+    <button id="pauseBtn" type="button" aria-label="一時停止">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
+    </button>
 
-    <div id="title" class="overlay">
-      <div class="panel">
+    <!-- タイトル -->
+    <div id="title" class="overlay title">
+      <div class="logo">
         <h1>行列作成</h1>
-        <p class="lead">お店が「○人くださ〜い」と言ったら、ゲートを開け閉めして<b>ぴったりの人数</b>を案内しよう！</p>
-        <ul class="rules">
-          <li>ゲートを開けている間、だんだん速く人が出ていく</li>
-          <li>閉めた時点で、その集団の人数が決まる</li>
-          <li>制限時間は60秒。連続で成功するとボーナス</li>
-        </ul>
-        <div class="themes" role="group" aria-label="見た目">
-          <span class="tl">見た目</span>
-          <button type="button" data-theme="simple">線画</button>
-          <button type="button" data-theme="pop">ポップ</button>
-          <button type="button" data-theme="neon">ネオン</button>
+        <p>ぴったりの人数を案内しよう！</p>
+      </div>
+      <div class="panel menu">
+        <div class="opt" data-key="diff">
+          <span class="tl">難易度</span>
+          <div class="seg">
+            <button type="button" data-v="easy">やさしい</button>
+            <button type="button" data-v="normal">ふつう</button>
+            <button type="button" data-v="hard">むずかしい</button>
+          </div>
+        </div>
+        <div class="opt" data-key="time">
+          <span class="tl">時間</span>
+          <div class="seg">
+            <button type="button" data-v="30">30秒</button>
+            <button type="button" data-v="60">60秒</button>
+            <button type="button" data-v="endless">エンドレス</button>
+          </div>
+        </div>
+        <div class="opt" data-key="theme">
+          <span class="tl">テーマ</span>
+          <div class="seg">
+            <button type="button" data-v="simple">線画</button>
+            <button type="button" data-v="pop">ポップ</button>
+            <button type="button" data-v="neon">ネオン</button>
+          </div>
         </div>
         <button id="startBtn" type="button" class="big">スタート</button>
-        <p class="hi">ハイスコア <span id="hiTitle">0</span></p>
-        <p class="hint">PCはスペースキーでも開け閉めできます</p>
+        <div class="foot">
+          <span class="hi">ハイスコア <b id="hiTitle">0</b></span>
+          <button id="helpBtn" type="button" class="help">？ 遊び方</button>
+        </div>
       </div>
     </div>
 
+    <!-- 遊び方 -->
+    <div id="help" class="overlay center hidden">
+      <div class="panel">
+        <h2>遊び方</h2>
+        <p class="lead">お店が「○人くださ〜い」と言ったら、ゲートを開け閉めして<b>ぴったりの人数</b>を案内しよう！</p>
+        <ul class="rules">
+          <li>ボタン（PCはスペースキー）でゲートを開け閉め</li>
+          <li>開けている間、だんだん速く人が出ていく</li>
+          <li>閉めた時点で、その集団の人数が決まる</li>
+          <li>店に着いたとき、ぴったりなら成功・違えばミス</li>
+          <li>連続で成功するとコンボボーナス</li>
+          <li>エンドレスはミス3回で終了</li>
+        </ul>
+        <button id="helpClose" type="button" class="big">とじる</button>
+      </div>
+    </div>
+
+    <!-- 一時停止 -->
+    <div id="pause" class="overlay center hidden">
+      <div class="panel">
+        <h2>一時停止</h2>
+        <button id="resumeBtn" type="button" class="big">再開</button>
+        <button id="quitBtn" type="button" class="sub">タイトルへ</button>
+      </div>
+    </div>
+
+    <!-- 結果 -->
     <div id="result" class="overlay hidden">
       <div class="panel">
         <h2>しゅうりょう！</h2>
+        <p id="rMode" class="mode">ふつう・60秒</p>
         <div class="score"><span id="rScore">0</span><small>点</small></div>
         <p id="rNew" class="new hidden">ハイスコア更新！</p>
         <dl class="stats">
