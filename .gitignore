@@ -20,3 +20,6 @@ Desktop.ini
 # ログ・一時ファイル
 *.log
 *.tmp
+
+# ランキングのデータ（server.js が自動で作る。サーバーのPCにだけ置く）
+data/

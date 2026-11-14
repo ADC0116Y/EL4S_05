@@ -923,7 +923,9 @@ async function submitRank(e) {
   } catch (err) {
     console.warn('ranking submit failed', err);
     $('rankSend').disabled = false;
-    msg.textContent = '登録できませんでした。通信状態を確認して、もう一度押してください';
+    msg.textContent = err.status === 429
+      ? '登録が続いています。少し待ってから、もう一度押してください'
+      : '登録できませんでした。通信状態を確認して、もう一度押してください';
   }
 }
 
